@@ -1,11 +1,16 @@
+from app.models.checkpoint import Checkpoint
 from app.services.store import STORE, now_utc
 
 
-def create_checkpoint(project_id: str, stage: str) -> dict:
-    return {
+def create_checkpoint(project_id: str, stage: str, db=None) -> dict:
+    checkpoint = {
         "checkpoint_id": STORE.next_id("chk"),
         "project_id": project_id,
         "stage": stage,
         "created_at": now_utc(),
     }
+    if db is not None:
+        db.add(Checkpoint(**checkpoint))
+        db.commit()
+    return checkpoint
 

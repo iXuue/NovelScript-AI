@@ -208,10 +208,27 @@ POST /projects/{project_id}/chapters/confirm
 `POST /projects/{project_id}/uploads` request:
 
 ```text
-multipart/form-data field: file
+multipart/form-data
+
+Single-file upload:
+field: file
+
+Multi-file upload:
+field: files
+
 Supported MVP extensions: .md, .txt, .docx, .pdf
 .doc returns 415 unsupported_media_type
 ```
+
+Upload splitting behavior:
+
+- `file` supports single-document multi-chapter novels.
+- `files` supports multi-document uploads. Files are sorted by natural filename order before chapter detection, for example `chapter2.txt` comes before `chapter10.txt`.
+- Each uploaded document is converted to Markdown before chapter detection.
+- A document with no recognizable chapter heading is treated as one chapter and uses the filename stem as the draft chapter title.
+- All detected chapters are re-numbered into one project-level sequence: `CH001`, `CH002`, `CH003`.
+- Paragraph IDs are generated per chapter after detection: `CH001_P001`, `CH001_P002`.
+- Response shape is the same for single-file and multi-file uploads.
 
 `POST /projects/{project_id}/uploads` response:
 

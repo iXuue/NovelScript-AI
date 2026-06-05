@@ -6,7 +6,11 @@ from app.api.errors import api_error
 from app.core.database import get_db
 from app.domain.artifacts import ProjectStage
 from app.services.chapter_service import UploadedMarkdownDocument, assign_paragraph_ids, detect_documents_chapters
-from app.services.chapter_persistence_service import replace_project_chapters
+from app.services.chapter_persistence_service import (
+    confirm_project_chapters,
+    list_pending_chapter_drafts,
+    replace_project_chapters,
+)
 from app.services.checkpoint_service import create_checkpoint
 from app.services.input_adapter import normalize_to_markdown
 from app.services.project_service import require_project, update_project_stage, update_project_stage_in_db
@@ -57,12 +61,12 @@ async def upload_novel(project_id: str, request: Request, db: Session = Depends(
 
 
 @router.get("/projects/{project_id}/chapters/pending")
-def get_pending_chapters(project_id: str):
+def get_pending_chapters(project_id: str, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
-    return {"chapters": STORE.chapters_pending.get(project_id, [])}
+    return {"chapters": list_pending_chapter_drafts(db, project_id)}
 
 
 class ConfirmChaptersRequest(BaseModel):
@@ -70,16 +74,17 @@ class ConfirmChaptersRequest(BaseModel):
 
 
 @router.post("/projects/{project_id}/chapters/confirm")
-def confirm_chapters(project_id: str, payload: ConfirmChaptersRequest):
+def confirm_chapters(project_id: str, payload: ConfirmChaptersRequest, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
-    pending = STORE.chapters_pending.get(project_id, [])
-    available = {chapter["chapter_id"] for chapter in pending}
-    if any(chapter_id not in available for chapter_id in payload.chapter_ids):
-        raise api_error(400, "validation_error", "Unknown chapter id")
-    checkpoint = create_checkpoint(project_id, "chapters_confirmed")
+    try:
+        confirm_project_chapters(db, project_id, payload.chapter_ids)
+    except ValueError as exc:
+        raise api_error(400, "validation_error", str(exc))
+    checkpoint = create_checkpoint(project_id, "chapters_confirmed", db)
     update_project_stage(project_id, ProjectStage.chapters_confirmed)
+    update_project_stage_in_db(db, project_id, ProjectStage.chapters_confirmed)
     return {"project_id": project_id, "stage": ProjectStage.chapters_confirmed, "checkpoint_id": checkpoint["checkpoint_id"]}
 
