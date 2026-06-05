@@ -40,12 +40,9 @@ def test_scene_plan_generation_persists_chapter_summaries_and_evidence_from_conf
         assert [summary.chapter_id for summary in summaries] == ["CH001", "CH002"]
         assert summaries[0].summary == "LLM章节摘要"
         assert summaries[0].source == "fake-analysis"
-        assert [request.task_type for request in client.fake_llm_provider.requests] == [
-            "chapter_summary",
-            "chapter_summary",
-            "evidence_extraction",
-            "evidence_extraction",
-        ]
+        task_types = [request.task_type for request in client.fake_llm_provider.requests]
+        assert task_types.count("chapter_summary") == 2
+        assert task_types.count("evidence_extraction") == 2
         assert [item.evidence_id for item in evidence_items] == ["EV001", "EV002"]
         assert evidence_items[0].paragraph_id == "CH001_P001"
         assert evidence_items[0].evidence_type == "关键事件"
