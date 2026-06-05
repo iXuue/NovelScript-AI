@@ -25,14 +25,16 @@ class FakeAnalysisLLMProvider(LLMProvider):
                 '"adaptation_suggestions":["保留雨夜归来的戏剧性"]}'
             )
         elif request.task_type == "evidence_extraction":
-            paragraph_id_match = re.search(r"- (CH\d+_P\d+):", request.prompt)
+            paragraph_match = re.search(r"- (CH\d+_P\d+): (.+)", request.prompt)
+            paragraph_id_match = paragraph_match
             paragraph_id = paragraph_id_match.group(1) if paragraph_id_match else "CH001_P001"
+            quote = paragraph_match.group(2) if paragraph_match else "她回来了。"
             text = (
-                '{"evidence":[{"paragraph_id":"%s","quote":"她回来了。",'
+                '{"evidence":[{"paragraph_id":"%s","quote":"%s",'
                 '"evidence_type":"关键事件","explanation":"主角归来推动剧情。",'
                 '"related_characters":["她"],"related_locations":[],"related_plot_points":["归来"],'
                 '"importance":5,"must_keep":true}]}'
-            ) % paragraph_id
+            ) % (paragraph_id, quote)
         else:
             text = "{}"
         return LLMResponse(text=text, model_name="fake-analysis", usage=LLMUsage(input_tokens=1, output_tokens=1))
