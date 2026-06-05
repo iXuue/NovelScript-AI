@@ -4,17 +4,15 @@ type Props = {
   error: string | null;
 };
 
-export function StatusBanner({ message, error }: Props) {
-  if (!message && !error) {
+export function StatusBanner({ error }: Props) {
+  if (!error) {
     return null;
   }
 
   return (
-    <div className={error ? "status-banner error" : "status-banner"} role={error ? "alert" : "status"}>
+    <div className="status-banner error" role="alert">
       <span className="status-dot" aria-hidden="true" />
-      <span>
-        {error ? error : message}
-      </span>
+      <span>{error}</span>
     </div>
   );
 }

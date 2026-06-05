@@ -72,7 +72,7 @@ function LegacyConversationPane({
         onChange={onStyleChange}
         onReferenceFileSelected={onStyleReferenceSelected}
       />
-      {needsSetup ? <p className="setup-hint">请上传小说并选择风格来源</p> : null}
+      {needsSetup ? <p className="setup-hint">请上传小说并完成风格设计</p> : null}
       <ChapterConfirmation chapters={chapters} confirmed={chaptersConfirmed} loading={loading} onConfirm={onConfirmChapters} />
       <section className="message-list" aria-label="对话记录">
         {messages.map((message) => (
@@ -127,7 +127,6 @@ export function ConversationPane({
 }: Props) {
   const [draft, setDraft] = useState("");
   const needsSetup = !hasNovelUpload || !selectedStyle;
-  const statusText = error ?? statusMessage ?? (mode === "demo" ? "后端未连接" : "后端已连接");
   const showAgentProgress =
     Boolean(activeLabel) || progress?.status === "queued" || progress?.status === "running";
 
@@ -154,10 +153,12 @@ export function ConversationPane({
           <div className="figma-section-label">当前项目</div>
           <h1>{projectName}</h1>
         </div>
-        <div className={error ? "figma-connection error" : "figma-connection"}>
-          <span className="figma-status-dot" aria-hidden="true" />
-          <span>{statusText}</span>
-        </div>
+        {error ? (
+          <div className="figma-connection error">
+            <span className="figma-status-dot" aria-hidden="true" />
+            <span>{error}</span>
+          </div>
+        ) : null}
       </header>
 
       <StyleSourceSelector
@@ -171,7 +172,7 @@ export function ConversationPane({
       <div className="figma-conversation-body">
         {needsSetup ? (
           <section className="figma-empty-prompt">
-            <h2>请上传小说并选择风格来源</h2>
+            <h2>请上传小说并完成风格设计</h2>
             <p>上传后系统会识别章节、生成摘要、建立证据索引，并进入 Scene Plan 阶段。</p>
           </section>
         ) : null}
@@ -197,21 +198,26 @@ export function ConversationPane({
       </div>
 
       <form className="figma-composer" onSubmit={handleSubmit}>
-        <label className="figma-file-button">
-          <span>{uploadedNovelName ? uploadedNovelName : "上传小说附件"}</span>
-          <input aria-label="上传小说附件" disabled={loading} type="file" accept=".md,.txt,.docx,.pdf" onChange={handleFileChange} />
-        </label>
-        <input
+        <textarea
           aria-label="对话输入"
           disabled={loading}
           placeholder="输入要求，例如：把第一场对白改得更短"
-          type="text"
+          rows={4}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
-        <button className="figma-primary" type="submit" disabled={loading || needsSetup}>
-          {loading ? "处理中" : "发送"}
-        </button>
+        <div className="figma-composer-footer">
+          <div className="figma-composer-tools">
+            <label className="figma-attachment-icon" title="上传小说附件">
+              <span aria-hidden="true">🔗</span>
+              <input aria-label="上传小说附件" disabled={loading} type="file" accept=".md,.txt,.docx,.pdf" onChange={handleFileChange} />
+            </label>
+            {uploadedNovelName ? <span className="figma-uploaded-name">{uploadedNovelName}</span> : null}
+          </div>
+          <button className="figma-primary" type="submit" disabled={loading || needsSetup}>
+            {loading ? "处理中" : "发送"}
+          </button>
+        </div>
       </form>
     </main>
   );

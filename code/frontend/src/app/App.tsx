@@ -227,7 +227,7 @@ export default function App({ initialYaml }: AppProps) {
       return;
     }
     setStyleSourceValue(source);
-    void runAction("正在保存风格来源", async () => {
+    void runAction("正在保存风格设计", async () => {
       if (mode === "live") {
         try {
           const response = await setStyleSource(activeProject.project_id, source);

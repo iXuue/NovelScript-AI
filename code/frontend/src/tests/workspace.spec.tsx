@@ -9,7 +9,7 @@ afterEach(() => {
 
 test("shows upload and style prompt before generation", () => {
   render(<App />);
-  expect(screen.getByText("请上传小说并选择风格来源")).toBeInTheDocument();
+  expect(screen.getByText("请上传小说并完成风格设计")).toBeInTheDocument();
 });
 
 test("yaml preview is read only", () => {
@@ -20,8 +20,8 @@ test("yaml preview is read only", () => {
 
 test("custom style text disables reference script upload", () => {
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: /请选择风格来源/ }));
-  fireEvent.change(screen.getByLabelText("自定义风格描述"), {
+  fireEvent.click(screen.getByRole("button", { name: /风格设计/ }));
+  fireEvent.change(screen.getByLabelText(/自定义风格描述/), {
     target: { value: "对白短促，节奏紧张" }
   });
   expect(screen.getByLabelText("上传历史剧本参考")).toBeDisabled();

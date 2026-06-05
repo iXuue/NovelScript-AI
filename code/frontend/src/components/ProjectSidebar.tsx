@@ -108,8 +108,6 @@ export function ProjectSidebar({
   onSelectView,
   onToggleCollapsed
 }: Props) {
-  const statusText = error ?? statusMessage ?? (mode === "demo" ? "后端未连接" : "后端已连接");
-
   return (
     <aside className={collapsed ? "figma-sidebar collapsed" : "figma-sidebar"} aria-label="项目导航">
       <div className="figma-brand-row">
@@ -140,10 +138,12 @@ export function ProjectSidebar({
             </button>
           </section>
 
-          <section className={error ? "figma-status error" : "figma-status"} role={error ? "alert" : "status"}>
-            <span className="figma-status-dot" aria-hidden="true" />
-            <span>{statusText}</span>
-          </section>
+          {error ? (
+            <section className="figma-status error" role="alert">
+              <span className="figma-status-dot" aria-hidden="true" />
+              <span>{error}</span>
+            </section>
+          ) : null}
 
           <section className="figma-sidebar-section">
             <div className="figma-section-label">项目</div>
