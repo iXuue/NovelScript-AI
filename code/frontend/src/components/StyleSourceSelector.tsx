@@ -111,10 +111,8 @@ export function StyleSourceSelector({ locked, loading, selected, onChange, onRef
         onClick={() => setModalOpen(true)}
       >
         <div className="figma-style-summary">
-          <div className="figma-section-label">风格设计</div>
           <h2>{selected ? selectedLabel : "点击设计生成风格"}</h2>
         </div>
-        <span className="figma-style-action">设计</span>
       </button>
 
       {locked ? <span className="figma-lock-badge">已锁定</span> : null}
@@ -124,7 +122,6 @@ export function StyleSourceSelector({ locked, loading, selected, onChange, onRef
           <section className="figma-style-modal" role="dialog" aria-modal="true" aria-labelledby="style-design-title">
             <header className="figma-style-modal-header">
               <div>
-                <div className="figma-section-label">风格设计</div>
                 <h2 id="style-design-title">设计生成风格</h2>
               </div>
               <button className="figma-style-close" type="button" aria-label="关闭风格设计" onClick={() => setModalOpen(false)}>

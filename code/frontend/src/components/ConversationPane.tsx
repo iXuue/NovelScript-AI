@@ -124,6 +124,7 @@ export function ConversationPane({
 }: Props) {
   const [draft, setDraft] = useState("");
   const needsSetup = !hasNovelUpload || !selectedStyle;
+  const showSetupHint = needsSetup && messages.length === 0;
   const showAgentProgress =
     Boolean(activeLabel) || progress?.status === "queued" || progress?.status === "running";
 
@@ -163,22 +164,16 @@ export function ConversationPane({
       />
 
       <div className="figma-conversation-body">
-        {needsSetup ? (
+        {showSetupHint ? (
           <section className="figma-empty-prompt">
             <h2>请上传小说并完成风格设计</h2>
-            <p>上传后系统会识别章节、生成摘要、建立证据索引，并进入 Scene Plan 阶段。</p>
+            <p>上传后系统会识别章节、生成摘要、建立证据索引，并进入场景计划阶段。</p>
           </section>
         ) : null}
 
         <ChapterConfirmation chapters={chapters} confirmed={chaptersConfirmed} loading={loading} onConfirm={onConfirmChapters} />
 
         <section className="figma-message-list" aria-label="对话记录">
-          {messages.length === 0 ? (
-            <div className="figma-message-placeholder">
-              <strong>暂无对话</strong>
-              <span>上传小说后，可以在这里追加改写要求或修订意见。</span>
-            </div>
-          ) : null}
           {messages.map((message) => (
             <article className={`figma-message ${message.role}`} key={message.message_id}>
               <div className="figma-message-role">{message.role === "user" ? "用户" : "Agent"}</div>

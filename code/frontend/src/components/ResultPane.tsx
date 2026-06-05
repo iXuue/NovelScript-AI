@@ -18,9 +18,7 @@ type Props = {
   loading: boolean;
   fallbackEvidence: Record<string, EvidenceLookupResult>;
   onExport: (format: ExportFormat) => void;
-  onGenerateScenePlan: () => void;
   onConfirmScenePlan: () => void;
-  onGenerateScript: () => void;
 };
 
 function LegacyResultPane({
@@ -34,9 +32,7 @@ function LegacyResultPane({
   scenePlanConfirmed,
   loading,
   fallbackEvidence,
-  onGenerateScenePlan,
-  onConfirmScenePlan,
-  onGenerateScript
+  onConfirmScenePlan
 }: Props) {
   const [evidenceBlockId, setEvidenceBlockId] = useState<string | null>(null);
 
@@ -53,11 +49,11 @@ function LegacyResultPane({
         <section className="scene-plan-panel">
           <div className="panel-title-row">
             <div>
-              <h2>Scene Plan</h2>
+              <h2>场景计划</h2>
               <p>{scenePlan.confirmed || scenePlanConfirmed ? "已确认，可继续生成剧本。" : "确认前只能查看，不提供字段编辑。"}</p>
             </div>
             <button className="primary-button" disabled={loading || scenePlan.confirmed || scenePlanConfirmed} type="button" onClick={onConfirmScenePlan}>
-              {scenePlan.confirmed || scenePlanConfirmed ? "已确认" : "确认 Scene Plan"}
+              {scenePlan.confirmed || scenePlanConfirmed ? "已确认" : "确认场景计划"}
             </button>
           </div>
           {scenePlan.scenes.map((scene) => (
@@ -97,16 +93,6 @@ function LegacyResultPane({
         <section className="empty-result" aria-label="成果空状态">
           <div className="pulse-mark" aria-hidden="true" />
           <p>{statusText}</p>
-          {viewMode === "scene-plan" ? (
-            <button className="primary-button" disabled={loading} type="button" onClick={onGenerateScenePlan}>
-              {loading ? "生成中" : "生成 Scene Plan"}
-            </button>
-          ) : null}
-          {viewMode === "script" ? (
-            <button className="primary-button" disabled={loading || !scenePlanConfirmed} type="button" onClick={onGenerateScript}>
-              {loading ? "生成中" : "开始生成剧本"}
-            </button>
-          ) : null}
         </section>
       ) : null}
 
@@ -135,9 +121,7 @@ export function ResultPane({
   viewMode,
   yaml,
   onConfirmScenePlan,
-  onExport,
-  onGenerateScenePlan,
-  onGenerateScript
+  onExport
 }: Props) {
   const [evidenceBlockId, setEvidenceBlockId] = useState<string | null>(null);
 
@@ -162,11 +146,11 @@ export function ResultPane({
           <section className="figma-scene-plan">
             <div className="figma-result-title-row">
               <div>
-                <h3>Scene Plan</h3>
+                <h3>场景计划</h3>
                 <p>{scenePlan.confirmed || scenePlanConfirmed ? "已确认，可继续生成剧本。" : "确认前仅用于查看，不开放字段编辑。"}</p>
               </div>
               <button className="figma-primary" disabled={loading || scenePlan.confirmed || scenePlanConfirmed} type="button" onClick={onConfirmScenePlan}>
-                {scenePlan.confirmed || scenePlanConfirmed ? "已确认" : "确认 Scene Plan"}
+                {scenePlan.confirmed || scenePlanConfirmed ? "已确认" : "确认场景计划"}
               </button>
             </div>
             <div className="figma-scene-cards">
@@ -221,17 +205,7 @@ export function ResultPane({
           <section className="figma-result-empty" aria-label="成果空状态">
             <div className="figma-empty-mark" aria-hidden="true" />
             <h3>{statusText}</h3>
-            <p>等待小说上传或生成完成后，这里会显示预览、剧本 YAML 和来源证据。</p>
-            {viewMode === "scene-plan" ? (
-              <button className="figma-primary" disabled={loading} type="button" onClick={onGenerateScenePlan}>
-                {loading ? "生成中" : "生成 Scene Plan"}
-              </button>
-            ) : null}
-            {viewMode === "script" ? (
-              <button className="figma-primary" disabled={loading || !scenePlanConfirmed} type="button" onClick={onGenerateScript}>
-                {loading ? "生成中" : "开始生成剧本"}
-              </button>
-            ) : null}
+            <p>等待场景计划/剧本生成后展示</p>
           </section>
         ) : null}
       </div>

@@ -313,7 +313,7 @@ export default function App({ initialYaml }: AppProps) {
 
   function handleGenerateScenePlan() {
     if (!activeProject) return;
-    void runAction("正在生成 Scene Plan", async () => {
+    void runAction("正在生成场景计划", async () => {
       if (mode === "live") {
         try {
           await generateScenePlan(activeProject.project_id);
@@ -337,7 +337,7 @@ export default function App({ initialYaml }: AppProps) {
 
   function handleConfirmScenePlan() {
     if (!activeProject || !scenePlan) return;
-    void runAction("正在确认 Scene Plan", async () => {
+    void runAction("正在确认场景计划", async () => {
       if (mode === "live") {
         try {
           const response = await confirmScenePlan(activeProject.project_id, "button");
@@ -416,7 +416,7 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject) return "暂无项目";
     if (!hasNovelUpload) return "正在等待用户上传";
     if (!scenePlan) return "正在等待生成场景";
-    if (!scenePlanConfirmed) return "正在等待用户确认 Scene Plan";
+    if (!scenePlanConfirmed) return "正在等待用户确认场景计划";
     if (!scriptPreview) return "正在等待生成剧本";
     return "剧本已生成";
   }, [activeProject, hasNovelUpload, scenePlan, scenePlanConfirmed, scriptPreview]);
@@ -513,8 +513,6 @@ export default function App({ initialYaml }: AppProps) {
           yaml={scriptPreview?.yaml ?? null}
           onConfirmScenePlan={handleConfirmScenePlan}
           onExport={handleExport}
-          onGenerateScenePlan={handleGenerateScenePlan}
-          onGenerateScript={handleGenerateScript}
         />
       </div>
     </div>
