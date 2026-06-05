@@ -16,6 +16,7 @@ class FakeAnalysisLLMProvider(LLMProvider):
     def __init__(self) -> None:
         self.requests: list[LLMRequest] = []
         self.fail_scene_plan_validation = False
+        self.fail_script_scene_validation = False
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         self.requests.append(request)
@@ -82,6 +83,20 @@ class FakeAnalysisLLMProvider(LLMProvider):
                 '"speaker":null,"source_evidence_ids":["EV001"]}'
                 ']}'
             )
+        elif request.task_type == "script_scene_validation":
+            if self.fail_script_scene_validation:
+                text = (
+                    '{"passed":false,"issues":[{"code":"missing_dialogue","message":"必保对白未落实"}],'
+                    '"suggestions":["补写她回来了这句对白"],'
+                    '"coverage":{"must_cover_plot":["她在雨夜回到旧宅"],"must_keep_dialogue":[],'
+                    '"must_keep_visual_elements":["雨夜","旧宅门口"],"must_keep_foreshadowing":["旧信"]}}'
+                )
+            else:
+                text = (
+                    '{"passed":true,"issues":[],"suggestions":[],'
+                    '"coverage":{"must_cover_plot":["她在雨夜回到旧宅"],"must_keep_dialogue":["她回来了。"],'
+                    '"must_keep_visual_elements":["雨夜","旧宅门口"],"must_keep_foreshadowing":["旧信"]}}'
+                )
         else:
             text = "{}"
         return LLMResponse(text=text, model_name="fake-analysis", usage=LLMUsage(input_tokens=1, output_tokens=1))

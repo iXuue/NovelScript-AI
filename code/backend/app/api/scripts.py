@@ -22,7 +22,9 @@ def generate_script_endpoint(
         return generate_script(project_id, db, llm_provider)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
-    except PermissionError:
+    except PermissionError as exc:
+        if str(exc) == "script_scene_validation_failed":
+            raise api_error(409, "script_scene_validation_failed", "Script scene validation failed")
         raise api_error(409, "scene_plan_not_confirmed", "Scene Plan must be confirmed before script generation")
 
 

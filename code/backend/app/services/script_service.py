@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.domain.artifacts import ArtifactStatus, ProjectStage
 from app.models.analysis import EvidenceItem
 from app.models.project import Project
-from app.models.script import ScriptContentBlock, ScriptScene, ScriptVersion
+from app.models.script import ScriptContentBlock, ScriptScene, ScriptSceneValidation, ScriptVersion
 from app.models.scene_plan import ScenePlan, ScenePlanScene
 from app.models.story import StoryBible
 from app.models.style import StyleProfile
@@ -57,6 +57,15 @@ def generate_script_from_confirmed_scene_plan(db: Session, project_id: str, llm_
         scenes=generated_scenes,
         source=",".join(sorted(set(model_names))) if model_names else "unknown",
     )
+    validations = _validate_and_store_script_scenes(db, version, scene_plan.scenes, evidence_items, style_profile, llm_provider)
+    if any(not validation.passed for validation in validations):
+        version.status = ArtifactStatus.failed
+        version.updated_at = now_utc()
+        db.commit()
+        _mirror_script_to_store(project_id, version)
+        update_project_stage(project_id, ProjectStage.script_generating)
+        update_project_stage_in_db(db, project_id, ProjectStage.script_generating)
+        raise PermissionError("script_scene_validation_failed")
     _mirror_script_to_store(project_id, version)
     update_project_stage(project_id, ProjectStage.script_ready)
     update_project_stage_in_db(db, project_id, ProjectStage.script_ready)
@@ -163,6 +172,83 @@ def _script_scene_prompt(
     )
 
 
+def _validate_and_store_script_scenes(
+    db: Session,
+    version: ScriptVersion,
+    scene_plan_scenes: list[ScenePlanScene],
+    evidence_items: list[EvidenceItem],
+    style_profile: StyleProfile | None,
+    llm_provider: LLMProvider,
+) -> list[ScriptSceneValidation]:
+    scene_plan_by_id = {scene.scene_id: scene for scene in scene_plan_scenes}
+    script_blocks_by_scene: dict[str, list[ScriptContentBlock]] = {}
+    for block in version.content_blocks:
+        script_blocks_by_scene.setdefault(block.scene_id, []).append(block)
+    validations = []
+    timestamp = now_utc()
+    for script_scene in sorted(version.scenes, key=lambda scene: scene.order):
+        scene_plan_scene = scene_plan_by_id[script_scene.scene_id]
+        response = llm_provider.generate(
+            LLMRequest(
+                task_type="script_scene_validation",
+                prompt=_script_scene_validation_prompt(
+                    scene_plan_scene,
+                    script_scene,
+                    sorted(script_blocks_by_scene.get(script_scene.scene_id, []), key=lambda block: block.order),
+                    evidence_items,
+                    style_profile,
+                ),
+                response_format="json",
+            )
+        )
+        payload = _validate_script_scene_validation_payload(_load_json_object(response.text))
+        validation = ScriptSceneValidation(
+            script_version_id=version.script_version_id,
+            project_id=version.project_id,
+            scene_id=script_scene.scene_id,
+            passed=payload["passed"],
+            issues=payload["issues"],
+            suggestions=payload["suggestions"],
+            coverage=payload["coverage"],
+            source=response.model_name,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+        db.add(validation)
+        validations.append(validation)
+    db.commit()
+    db.refresh(version)
+    return validations
+
+
+def _script_scene_validation_prompt(
+    scene_plan_scene: ScenePlanScene,
+    script_scene: ScriptScene,
+    content_blocks: list[ScriptContentBlock],
+    evidence_items: list[EvidenceItem],
+    style_profile: StyleProfile | None,
+) -> str:
+    relevant_evidence = [evidence for evidence in evidence_items if evidence.evidence_id in scene_plan_scene.source_evidence_ids]
+    return (
+        "You are the Script Scene Validator. Validate one generated screenplay scene against its confirmed Scene Plan.\n"
+        "Return only one JSON object. No Markdown. No explanation.\n"
+        "JSON schema: {\"passed\":true,\"issues\":[],\"suggestions\":[],"
+        "\"coverage\":{\"must_cover_plot\":[],\"must_keep_dialogue\":[],"
+        "\"must_keep_visual_elements\":[],\"must_keep_foreshadowing\":[]}}\n"
+        "Validation checklist:\n"
+        "- Required plot beats are present in screenplay content blocks.\n"
+        "- Required dialogue, visual elements, and foreshadowing are preserved.\n"
+        "- Dialogue blocks have speakers, block types are valid, and evidence references are coherent.\n"
+        "- The scene reads as filmable screenplay content, not novel summary.\n"
+        "- Style follows the style profile.\n\n"
+        f"scene_plan_scene:\n{_scene_block(scene_plan_scene)}\n\n"
+        f"script_scene:\n{_script_scene_block(script_scene)}\n\n"
+        f"content_blocks:\n{_script_block(content_blocks)}\n\n"
+        f"relevant_evidence:\n{_evidence_block(relevant_evidence)}\n\n"
+        f"style_profile:\n{style_profile.profile_text if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
+    )
+
+
 def _scene_block(scene: ScenePlanScene) -> str:
     return json.dumps(
         {
@@ -183,6 +269,37 @@ def _scene_block(scene: ScenePlanScene) -> str:
             "adaptation_note": scene.adaptation_note,
         },
         ensure_ascii=False,
+    )
+
+
+def _script_scene_block(scene: ScriptScene) -> str:
+    return json.dumps(
+        {
+            "scene_id": scene.scene_id,
+            "title": scene.title,
+            "source_chapter_ids": scene.source_chapter_ids,
+            "scene_info": scene.scene_info,
+            "characters": scene.characters,
+            "scene_purpose": scene.scene_purpose,
+            "core_conflict": scene.core_conflict,
+        },
+        ensure_ascii=False,
+    )
+
+
+def _script_block(content_blocks: list[ScriptContentBlock]) -> str:
+    return "\n".join(
+        json.dumps(
+            {
+                "content_block_id": block.content_block_id,
+                "type": block.block_type,
+                "text": block.text,
+                "speaker": block.speaker,
+                "source_evidence_ids": block.source_evidence_ids,
+            },
+            ensure_ascii=False,
+        )
+        for block in content_blocks
     )
 
 
@@ -264,6 +381,22 @@ def _load_json_object(text: str) -> dict:
     if not isinstance(payload, dict):
         raise RuntimeError("script_generation provider response must be a JSON object")
     return payload
+
+
+def _validate_script_scene_validation_payload(payload: dict) -> dict:
+    passed = payload.get("passed")
+    issues = payload.get("issues")
+    suggestions = payload.get("suggestions")
+    coverage = payload.get("coverage")
+    if not isinstance(passed, bool):
+        raise RuntimeError("script_scene_validation field passed must be a boolean")
+    if not isinstance(issues, list):
+        raise RuntimeError("script_scene_validation field issues must be a list")
+    if not isinstance(suggestions, list):
+        raise RuntimeError("script_scene_validation field suggestions must be a list")
+    if not isinstance(coverage, dict):
+        raise RuntimeError("script_scene_validation field coverage must be an object")
+    return {"passed": passed, "issues": issues, "suggestions": suggestions, "coverage": coverage}
 
 
 def _validate_script_scene_payload(payload: dict, scene: ScenePlanScene, evidence_ids: set[str]) -> dict:
@@ -382,6 +515,7 @@ def _internal_script(version: ScriptVersion) -> dict:
 
 
 def _script_ui(version: ScriptVersion) -> dict:
+    validations_by_scene = {validation.scene_id: validation for validation in version.scene_validations}
     return {
         "script_version_id": version.script_version_id,
         "status": version.status,
@@ -395,6 +529,7 @@ def _script_ui(version: ScriptVersion) -> dict:
                 "characters": scene.characters,
                 "scene_purpose": scene.scene_purpose,
                 "core_conflict": scene.core_conflict,
+                "validation": _validation_to_dict(validations_by_scene.get(scene.scene_id)),
             }
             for scene in sorted(version.scenes, key=lambda item: item.order)
         ],
@@ -432,3 +567,16 @@ def _mirror_script_to_store(project_id: str, version: ScriptVersion) -> None:
     }
     STORE.script_ui[project_id] = _script_ui(version)
     STORE.yaml_previews[project_id] = _yaml_preview(version)
+
+
+def _validation_to_dict(validation: ScriptSceneValidation | None) -> dict | None:
+    if validation is None:
+        return None
+    return {
+        "passed": validation.passed,
+        "issues": validation.issues,
+        "suggestions": validation.suggestions,
+        "coverage": validation.coverage,
+        "source": validation.source,
+        "created_at": validation.created_at,
+    }
