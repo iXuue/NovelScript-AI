@@ -2,6 +2,7 @@ from app.models.analysis import ChapterSummary, EvidenceItem
 from app.models.chapter import Chapter, Paragraph
 from app.models.checkpoint import Checkpoint
 from app.models.project import Project
+from app.models.story import StoryBible
 from app.models.style import StyleProfile, StyleReferenceFile, StyleSourceRecord
 
 __all__ = [
@@ -11,6 +12,7 @@ __all__ = [
     "EvidenceItem",
     "Paragraph",
     "Project",
+    "StoryBible",
     "StyleProfile",
     "StyleReferenceFile",
     "StyleSourceRecord",

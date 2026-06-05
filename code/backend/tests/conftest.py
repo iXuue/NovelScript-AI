@@ -41,6 +41,15 @@ class FakeAnalysisLLMProvider(LLMProvider):
                 "场景短小精悍，切换频繁，通过硬切和悬念转场保持快节奏。"
                 "冲突通过持续施压和信息差推进。旁白极少，动作描写服务于紧张氛围。"
             )
+        elif request.task_type == "story_bible":
+            text = (
+                '{"title":"雨夜归来","story_type":"悬疑","tone":"冷峻紧张",'
+                '"logline":"她在雨夜回到旧宅，旧信揭开隐藏的秘密。","theme":"归来与真相",'
+                '"main_characters":[{"name":"她","role":"主角","goal":"寻找真相"}],'
+                '"relationships":[],"locations":[{"name":"旧宅","description":"雨夜中的关键地点"}],'
+                '"timeline":["雨夜归来"],"central_conflict":"主角归来后面对未知阻力",'
+                '"foreshadowing":["旧信"]}'
+            )
         else:
             text = "{}"
         return LLMResponse(text=text, model_name="fake-analysis", usage=LLMUsage(input_tokens=1, output_tokens=1))
