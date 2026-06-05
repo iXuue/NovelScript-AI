@@ -2,8 +2,10 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.domain.artifacts import ProjectStage
 from app.domain.style import StyleSource
+from app.models.style import StyleReferenceFile, StyleSourceRecord
 from app.services.project_service import update_project_stage
 from app.services.store import STORE
+from app.services.store import now_utc
 
 
 STYLE_ADAPTER = TypeAdapter(StyleSource)
@@ -20,12 +22,33 @@ def validate_style_source(data: dict) -> StyleSource:
         raise ValueError(str(exc)) from exc
 
 
-def set_style_source(project_id: str, data: dict) -> dict:
+def set_style_source(project_id: str, data: dict, db=None) -> dict:
     if project_id in STORE.style_locked:
         raise PermissionError("style_source_locked")
     source = validate_style_source(data)
     source_dict = source.model_dump()
     STORE.style_sources[project_id] = source_dict
+    if db is not None:
+        timestamp = now_utc()
+        record = db.get(StyleSourceRecord, project_id)
+        if record is None:
+            record = StyleSourceRecord(
+                project_id=project_id,
+                kind=source_dict["kind"],
+                builtin_style=source_dict.get("builtin_style"),
+                style_text=source_dict.get("style_text"),
+                reference_file_ids=source_dict.get("reference_file_ids") or [],
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+            db.add(record)
+        else:
+            record.kind = source_dict["kind"]
+            record.builtin_style = source_dict.get("builtin_style")
+            record.style_text = source_dict.get("style_text")
+            record.reference_file_ids = source_dict.get("reference_file_ids") or []
+            record.updated_at = timestamp
+        db.commit()
     update_project_stage(project_id, ProjectStage.style_selected)
     return {
         "project_id": project_id,
@@ -35,21 +58,36 @@ def set_style_source(project_id: str, data: dict) -> dict:
     }
 
 
-def get_style_source(project_id: str) -> dict:
+def get_style_source(project_id: str, db=None) -> dict:
+    style_source = STORE.style_sources.get(project_id)
+    if db is not None:
+        record = db.get(StyleSourceRecord, project_id)
+        if record is not None:
+            if record.kind == "builtin":
+                style_source = {"kind": "builtin", "builtin_style": record.builtin_style}
+            elif record.kind == "custom_text":
+                style_source = {"kind": "custom_text", "style_text": record.style_text}
+            else:
+                style_source = {"kind": "reference_scripts", "reference_file_ids": record.reference_file_ids}
     return {
         "project_id": project_id,
-        "style_source": STORE.style_sources.get(project_id),
+        "style_source": style_source,
         "style_locked": project_id in STORE.style_locked,
     }
 
 
-def clear_style_source(project_id: str) -> None:
+def clear_style_source(project_id: str, db=None) -> None:
     if project_id in STORE.style_locked:
         raise PermissionError("style_source_locked")
     STORE.style_sources.pop(project_id, None)
+    if db is not None:
+        record = db.get(StyleSourceRecord, project_id)
+        if record is not None:
+            db.delete(record)
+            db.commit()
 
 
-def upload_style_reference(project_id: str, filename: str) -> dict:
+def upload_style_reference(project_id: str, filename: str, markdown: str = "", db=None) -> dict:
     if project_id in STORE.style_locked:
         raise PermissionError("style_source_locked")
     file_id = STORE.next_id("file_style")
@@ -61,6 +99,17 @@ def upload_style_reference(project_id: str, filename: str) -> dict:
         "stage": STORE.projects[project_id]["stage"],
     }
     STORE.style_files[file_id] = payload
+    if db is not None:
+        db.add(
+            StyleReferenceFile(
+                file_id=file_id,
+                project_id=project_id,
+                filename=filename,
+                markdown=markdown,
+                created_at=now_utc(),
+            )
+        )
+        db.commit()
     return payload
 
 

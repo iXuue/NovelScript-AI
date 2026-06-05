@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Response
+from sqlalchemy.orm import Session
 
 from app.api.errors import api_error
+from app.core.database import get_db
 from app.services.project_service import require_project
 from app.services.style_service import clear_style_source, get_style_source, set_style_source
 
@@ -8,10 +10,10 @@ router = APIRouter()
 
 
 @router.post("/projects/{project_id}/style-source")
-def set_style_source_endpoint(project_id: str, payload: dict):
+def set_style_source_endpoint(project_id: str, payload: dict, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
-        return set_style_source(project_id, payload)
+        return set_style_source(project_id, payload, db)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
     except PermissionError:
@@ -21,19 +23,19 @@ def set_style_source_endpoint(project_id: str, payload: dict):
 
 
 @router.get("/projects/{project_id}/style-source")
-def get_style_source_endpoint(project_id: str):
+def get_style_source_endpoint(project_id: str, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
-        return get_style_source(project_id)
+        return get_style_source(project_id, db)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
 
 
 @router.delete("/projects/{project_id}/style-source", status_code=204)
-def clear_style_source_endpoint(project_id: str):
+def clear_style_source_endpoint(project_id: str, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
-        clear_style_source(project_id)
+        clear_style_source(project_id, db)
         return Response(status_code=204)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")

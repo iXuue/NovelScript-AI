@@ -9,6 +9,7 @@ from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage
 from app.services.run_service import create_project_run
 from app.services.store import STORE, now_utc
+from app.services.style_profile_service import generate_style_profile
 
 
 @dataclass
@@ -42,6 +43,7 @@ def generate_scene_plan(project_id: str, db=None, llm_provider: LLMProvider | No
     )
     if db is not None:
         run_initial_text_analysis(db, project_id, llm_provider)
+        generate_style_profile(db, project_id, llm_provider)
     scenes = []
     chapters = _confirmed_chapter_drafts(db, project_id) if db is not None else STORE.chapters_pending.get(project_id, [])
     for index, chapter in enumerate(chapters or [{"chapter_id": "CH001", "title": "未命名场景"}], start=1):
