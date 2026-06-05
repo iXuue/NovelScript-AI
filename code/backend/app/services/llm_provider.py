@@ -3,7 +3,7 @@ import json
 from typing import Any, Callable
 from urllib import error, request
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 
 
 @dataclass
@@ -127,4 +127,8 @@ def provider_from_settings(settings: Settings) -> LLMProvider:
         api_key=settings.openai_api_key,
         model=settings.openai_model,
     )
+
+
+def get_llm_provider() -> LLMProvider:
+    return provider_from_settings(get_settings())
 

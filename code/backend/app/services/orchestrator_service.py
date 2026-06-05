@@ -1,8 +1,11 @@
 from dataclasses import dataclass, field
 
 from app.domain.artifacts import ArtifactStatus, ProjectStage
+from app.models.chapter import Chapter
+from app.services.analysis_worker_service import run_initial_text_analysis
 from app.services.chapter_service import Paragraph
 from app.services.export_service import to_yaml_preview
+from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage
 from app.services.run_service import create_project_run
 from app.services.store import STORE, now_utc
@@ -24,7 +27,7 @@ def build_initial_generation_plan() -> OrchestrationPlan:
     )
 
 
-def generate_scene_plan(project_id: str) -> dict:
+def generate_scene_plan(project_id: str, db=None, llm_provider: LLMProvider | None = None) -> dict:
     run = create_project_run(
         project_id,
         trigger_type="initial_analysis_scene_plan",
@@ -37,8 +40,10 @@ def generate_scene_plan(project_id: str) -> dict:
             "scene_plan",
         ],
     )
+    if db is not None:
+        run_initial_text_analysis(db, project_id, llm_provider)
     scenes = []
-    chapters = STORE.chapters_pending.get(project_id, [])
+    chapters = _confirmed_chapter_drafts(db, project_id) if db is not None else STORE.chapters_pending.get(project_id, [])
     for index, chapter in enumerate(chapters or [{"chapter_id": "CH001", "title": "未命名场景"}], start=1):
         scenes.append(
             {
@@ -64,6 +69,18 @@ def generate_scene_plan(project_id: str) -> dict:
     }
     update_project_stage(project_id, ProjectStage.scene_plan_draft)
     return {"run_id": run["run_id"], "scene_plan_id": scene_plan_id, "status": "running"}
+
+
+def _confirmed_chapter_drafts(db, project_id: str) -> list[dict]:
+    return [
+        {"chapter_id": chapter.chapter_id, "title": chapter.title}
+        for chapter in (
+            db.query(Chapter)
+            .filter(Chapter.project_id == project_id, Chapter.status == "confirmed")
+            .order_by(Chapter.order)
+            .all()
+        )
+    ]
 
 
 def confirm_scene_plan(project_id: str, confirmation_source: str, message_id: str | None = None) -> dict:

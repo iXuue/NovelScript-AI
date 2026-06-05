@@ -1,7 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.api.errors import api_error
+from app.core.database import get_db
+from app.services.llm_provider import LLMProvider, get_llm_provider
 from app.services.orchestrator_service import confirm_scene_plan, generate_scene_plan
 from app.services.project_service import require_project
 from app.services.store import STORE
@@ -15,10 +18,14 @@ class ConfirmScenePlanRequest(BaseModel):
 
 
 @router.post("/projects/{project_id}/scene-plan/generate")
-def generate_scene_plan_endpoint(project_id: str):
+def generate_scene_plan_endpoint(
+    project_id: str,
+    db: Session = Depends(get_db),
+    llm_provider: LLMProvider = Depends(get_llm_provider),
+):
     try:
         require_project(project_id)
-        return generate_scene_plan(project_id)
+        return generate_scene_plan(project_id, db, llm_provider)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
 
