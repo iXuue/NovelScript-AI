@@ -91,7 +91,7 @@ export default function App({ initialYaml }: AppProps) {
   const [failedStage, setFailedStage] = useState<string | null>(null);
   const [latestExport, setLatestExport] = useState<ExportResult | null>(null);
   const [uploadedNovelName, setUploadedNovelName] = useState<string | null>(null);
-  const [newProjectName, setNewProjectName] = useState("雨夜归来");
+  const [newProjectName, setNewProjectName] = useState("新项目");
 
   const activeProject = useMemo(
     () => projects.find((project) => project.project_id === activeProjectId) ?? projects[0],
@@ -203,7 +203,8 @@ export default function App({ initialYaml }: AppProps) {
   }
 
   function handleNewProject() {
-    const name = newProjectName.trim() || "未命名项目";
+    const trimmedName = newProjectName.trim();
+    const name = trimmedName && trimmedName !== "新项目" ? trimmedName : `新项目 ${projects.length + 1}`;
     void runAction("正在新建项目", async () => {
       if (mode === "live") {
         try {

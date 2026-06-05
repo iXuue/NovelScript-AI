@@ -12,7 +12,7 @@ export function nowIso(): string {
   return new Date().toISOString();
 }
 
-export function createDemoProject(name = "雨夜归来"): ProjectSummary {
+export function createDemoProject(name = "新项目"): ProjectSummary {
   return {
     project_id: `proj_demo_${Date.now()}`,
     name,
@@ -27,7 +27,7 @@ export function createDemoProject(name = "雨夜归来"): ProjectSummary {
 export function detectDemoChapters(text: string): ChapterDraft[] {
   const matches = [...text.matchAll(/(?:^|\n)#?\s*((?:第[一二三四五六七八九十百千万0-9]+章|Chapter\s+\d+)[^\n]*)/gi)];
   const titles = matches.map((match) => match[1].trim()).filter(Boolean);
-  const normalized = titles.length >= 1 ? titles : ["第一章 雨夜", "第二章 旧信", "第三章 对峙"];
+  const normalized = titles.length >= 1 ? titles : ["第一章", "第二章", "第三章"];
   return normalized.slice(0, 5).map((title, index) => ({
     chapter_id: `CH${String(index + 1).padStart(3, "0")}`,
     title,
@@ -48,12 +48,12 @@ export function createDemoScenePlan(chapters: ChapterDraft[]): ScenePlan {
       title: chapter.title.replace(/^第.+?章\s*/, "") || chapter.title,
       source_chapter_ids: [chapter.chapter_id],
       source_evidence_ids: [`EV${String(index + 1).padStart(3, "0")}`],
-      location: index === 0 ? "旧宅门口" : "室内",
-      time: index === 0 ? "雨夜" : "夜",
-      characters: index === 0 ? ["林雨"] : ["林雨", "周岚"],
-      scene_function: index === 0 ? "建立主角回归与悬念" : "推进人物关系与核心冲突",
-      core_conflict: index === 0 ? "林雨是否进入旧宅" : "角色是否说出被隐藏的真相",
-      adaptation_note: "保留原文章节核心意象，压缩为可拍摄场景。"
+      location: "待定地点",
+      time: "待定时间",
+      characters: index === 0 ? ["主要角色"] : ["主要角色", "关联角色"],
+      scene_function: index === 0 ? "建立开场信息与人物动机" : "推进人物关系与核心冲突",
+      core_conflict: index === 0 ? "主要角色是否采取行动" : "角色之间的目标是否发生冲突",
+      adaptation_note: "保留原文章节核心信息，压缩为可拍摄场景。"
     }))
   };
 }
@@ -80,13 +80,13 @@ export function createDemoScript(projectName: string, scenePlan: ScenePlan): {
     characters: [${scene.characters.join(", ")}]
     beats:
       - type: action
-        text: ${index === 0 ? "雨水顺着屋檐落下，林雨停在旧宅门口。" : "屋内的沉默被一句追问打破。"}`
+        text: ${index === 0 ? "主要角色停在关键地点，行动即将开始。" : "沉默被一句追问打破，冲突继续推进。"}`
     )
     .join("\n");
 
   const yaml = `title: ${projectName}
 characters:
-  - name: 林雨
+  - name: 主要角色
     role: 主角
 scenes:
 ${yamlScenes}
@@ -102,7 +102,7 @@ ${yamlScenes}
             source_evidence_id: block.source_evidence_ids[0],
             chapter_id: scenePlan.scenes[index].source_chapter_ids[0],
             paragraph_id: `${scenePlan.scenes[index].source_chapter_ids[0]}_P001`,
-            text: index === 0 ? "她在雨夜回来了。" : "那封旧信被重新摆上桌面。"
+            text: index === 0 ? "主要角色准备采取行动。" : "关键线索被重新提出。"
           }
         ]
       }
@@ -139,4 +139,3 @@ export function createLocalMessage(
     created_at: nowIso()
   };
 }
-

@@ -13,13 +13,14 @@ test("shows upload and style prompt before generation", () => {
 });
 
 test("yaml preview is read only", () => {
-  render(<App initialYaml={"title: 雨夜归来"} />);
-  expect(screen.getByText("title: 雨夜归来")).toBeInTheDocument();
+  render(<App initialYaml={"title: 测试剧本"} />);
+  expect(screen.getByText("title: 测试剧本")).toBeInTheDocument();
   expect(screen.queryByRole("textbox", { name: /yaml/i })).not.toBeInTheDocument();
 });
 
 test("custom style text disables reference script upload", () => {
   render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: /请选择风格来源/ }));
   fireEvent.change(screen.getByLabelText("自定义风格描述"), {
     target: { value: "对白短促，节奏紧张" }
   });
