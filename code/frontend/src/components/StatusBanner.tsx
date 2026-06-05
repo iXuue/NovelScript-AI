@@ -4,8 +4,8 @@ type Props = {
   error: string | null;
 };
 
-export function StatusBanner({ mode, message, error }: Props) {
-  if (!message && !error && mode === "live") {
+export function StatusBanner({ message, error }: Props) {
+  if (!message && !error) {
     return null;
   }
 
@@ -14,9 +14,7 @@ export function StatusBanner({ mode, message, error }: Props) {
       <span className="status-dot" aria-hidden="true" />
       <span>
         {error ? error : message}
-        {!error && mode === "demo" ? "后端未连接时，界面会使用本地演示数据保持可操作。" : null}
       </span>
     </div>
   );
 }
-

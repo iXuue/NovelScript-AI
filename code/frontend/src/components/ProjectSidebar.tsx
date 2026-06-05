@@ -91,19 +91,6 @@ function LegacyProjectSidebar({
   );
 }
 
-const stageLabels: Record<ProjectSummary["stage"], string> = {
-  empty: "未开始",
-  uploaded: "已上传",
-  chapters_pending: "待确认章节",
-  chapters_confirmed: "章节已确认",
-  style_selected: "风格已选择",
-  scene_plan_draft: "Scene Plan 草稿",
-  scene_plan_confirmed: "Scene Plan 已确认",
-  script_generating: "剧本生成中",
-  script_ready: "剧本已生成",
-  failed: "失败"
-};
-
 export function ProjectSidebar({
   collapsed,
   currentProject,
@@ -121,7 +108,7 @@ export function ProjectSidebar({
   onSelectView,
   onToggleCollapsed
 }: Props) {
-  const statusText = error ?? statusMessage ?? (mode === "demo" ? "演示模式" : "后端已连接");
+  const statusText = error ?? statusMessage ?? (mode === "demo" ? "后端未连接" : "后端已连接");
 
   return (
     <aside className={collapsed ? "figma-sidebar collapsed" : "figma-sidebar"} aria-label="项目导航">
@@ -162,7 +149,6 @@ export function ProjectSidebar({
             <div className="figma-section-label">项目</div>
             <button className="figma-current-project" type="button" onClick={() => onSelectProject(currentProject.project_id)}>
               <span>{currentProject.name}</span>
-              <small>{stageLabels[currentProject.stage]}</small>
             </button>
             <div className="figma-project-list">
               {projects.map((project) => (
@@ -173,7 +159,6 @@ export function ProjectSidebar({
                   onClick={() => onSelectProject(project.project_id)}
                 >
                   <span>{project.name}</span>
-                  <small>{stageLabels[project.stage]}</small>
                 </button>
               ))}
             </div>

@@ -126,7 +126,7 @@ export default function App({ initialYaml }: AppProps) {
       .catch(() => {
         if (!mounted) return;
         setMode("demo");
-        setStatusMessage("演示模式：");
+        setStatusMessage("后端未连接。");
       });
     return () => {
       mounted = false;
@@ -199,7 +199,7 @@ export default function App({ initialYaml }: AppProps) {
     setProjects((items) => [project, ...items]);
     setActiveProjectId(project.project_id);
     resetArtifactsForProject();
-    setStatusMessage("演示模式：");
+    setStatusMessage("后端未连接。");
   }
 
   function handleNewProject() {

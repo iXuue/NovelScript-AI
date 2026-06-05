@@ -127,7 +127,7 @@ export function ConversationPane({
 }: Props) {
   const [draft, setDraft] = useState("");
   const needsSetup = !hasNovelUpload || !selectedStyle;
-  const statusText = error ?? statusMessage ?? (mode === "demo" ? "演示模式" : "后端已连接");
+  const statusText = error ?? statusMessage ?? (mode === "demo" ? "后端未连接" : "后端已连接");
   const showAgentProgress =
     Boolean(activeLabel) || progress?.status === "queued" || progress?.status === "running";
 

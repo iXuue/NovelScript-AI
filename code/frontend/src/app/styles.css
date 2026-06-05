@@ -3769,3 +3769,57 @@ body {
     linear-gradient(180deg, rgba(135, 225, 255, 0.28), rgba(255, 255, 255, 0.66)) padding-box,
     linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.32) 45%, rgba(255, 255, 255, 0.88)) border-box;
 }
+
+/* Natural button tuning: softer edges, closer to the earlier restrained button feel. */
+.figma-primary,
+.figma-secondary,
+.figma-file-button,
+.figma-style-pill,
+.figma-nav-item.active,
+.figma-workspace .ghost-button {
+  background-clip: border-box;
+  border: 1px solid rgba(96, 157, 183, 0.28);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.58), 0 8px 18px rgba(113, 154, 180, 0.12);
+}
+
+.figma-primary {
+  background: linear-gradient(180deg, #8ce4fb 0%, #5ecfe9 100%);
+  border-color: rgba(70, 176, 207, 0.34);
+  box-shadow: 0 8px 18px rgba(85, 205, 234, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  color: #152338;
+}
+
+.figma-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fa8582 0%, #e36d6b 100%);
+  border-color: rgba(199, 91, 91, 0.32);
+  box-shadow: 0 8px 18px rgba(227, 109, 107, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  color: #241214;
+}
+
+.figma-primary:active:not(:disabled) {
+  background: linear-gradient(180deg, #e36d6b 0%, #d96361 100%);
+  border-color: rgba(199, 91, 91, 0.38);
+}
+
+.figma-secondary,
+.figma-file-button,
+.figma-style-pill,
+.figma-workspace .ghost-button {
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.figma-secondary:hover:not(:disabled),
+.figma-file-button:hover,
+.figma-style-pill:hover:not(:disabled),
+.figma-workspace .ghost-button:hover:not(:disabled) {
+  background: rgba(135, 225, 255, 0.2);
+  border-color: rgba(85, 205, 234, 0.32);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.58), 0 8px 18px rgba(85, 205, 234, 0.12);
+}
+
+.figma-style-pill.active,
+.figma-nav-item.active {
+  background: linear-gradient(180deg, rgba(135, 225, 255, 0.54), rgba(255, 229, 228, 0.5));
+  border-color: rgba(85, 205, 234, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52), 0 8px 18px rgba(113, 154, 180, 0.1);
+}
