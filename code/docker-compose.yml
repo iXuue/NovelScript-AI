@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: novelscript
+      POSTGRES_USER: novelscript
+      POSTGRES_PASSWORD: novelscript
+    ports:
+      - "5432:5432"
+    volumes:
+      - novelscript_postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://novelscript:novelscript@postgres:5432/novelscript
+      STORAGE_ROOT: /app/storage
+      LOCAL_DEVELOPER_LOGS_ENABLED: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      - postgres
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  novelscript_postgres_data:
+

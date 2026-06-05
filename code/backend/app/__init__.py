@@ -1,0 +1,2 @@
+"""NovelScript AI backend package."""
+
