@@ -8,6 +8,7 @@ from app.services.export_service import to_yaml_preview
 from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage
 from app.services.run_service import create_project_run
+from app.services.scene_plan_service import confirm_current_scene_plan, generate_scene_plan_artifact
 from app.services.store import STORE, now_utc
 from app.services.story_bible_service import generate_story_bible
 from app.services.style_profile_service import generate_style_profile
@@ -46,6 +47,10 @@ def generate_scene_plan(project_id: str, db=None, llm_provider: LLMProvider | No
         run_initial_text_analysis(db, project_id, llm_provider)
         generate_story_bible(db, project_id, llm_provider)
         generate_style_profile(db, project_id, llm_provider)
+        scene_plan = generate_scene_plan_artifact(db, project_id, llm_provider)
+        STORE.scene_plans[project_id] = scene_plan
+        update_project_stage(project_id, ProjectStage.scene_plan_draft)
+        return {"run_id": run["run_id"], "scene_plan_id": scene_plan["scene_plan_id"], "status": "running"}
     scenes = []
     chapters = _confirmed_chapter_drafts(db, project_id) if db is not None else STORE.chapters_pending.get(project_id, [])
     for index, chapter in enumerate(chapters or [{"chapter_id": "CH001", "title": "未命名场景"}], start=1):
@@ -87,7 +92,9 @@ def _confirmed_chapter_drafts(db, project_id: str) -> list[dict]:
     ]
 
 
-def confirm_scene_plan(project_id: str, confirmation_source: str, message_id: str | None = None) -> dict:
+def confirm_scene_plan(project_id: str, confirmation_source: str, message_id: str | None = None, db=None) -> dict:
+    if db is not None:
+        return confirm_current_scene_plan(db, project_id, confirmation_source, message_id)
     scene_plan = STORE.scene_plans.get(project_id)
     if scene_plan is None:
         raise KeyError("scene_plan_missing")
