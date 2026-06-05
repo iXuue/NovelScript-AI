@@ -88,6 +88,13 @@ def get_current_yaml_preview(db: Session, project_id: str) -> dict | None:
     return _yaml_preview(version)
 
 
+def get_current_internal_script(db: Session, project_id: str) -> tuple[ScriptVersion, dict] | None:
+    version = _current_script_version(db, project_id)
+    if version is None:
+        return None
+    return version, _internal_script(version)
+
+
 def repair_script_scene(db: Session, project_id: str, scene_id: str, llm_provider: LLMProvider | None) -> dict:
     version = _latest_script_version(db, project_id)
     if version is None:
