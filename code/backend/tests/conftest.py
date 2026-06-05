@@ -74,6 +74,18 @@ class FakeAnalysisLLMProvider(LLMProvider):
                     '{"passed":true,"issues":[],"suggestions":[],'
                     '"coverage":{"chapter_ids":["CH001"],"evidence_ids":["EV001"]}}'
                 )
+        elif request.task_type == "scene_plan_repair":
+            text = (
+                '{"scenes":[{"scene_id":"S001","order":1,"title":"雨夜归来",'
+                '"source_chapter_ids":["CH001"],"source_evidence_ids":["EV001"],'
+                '"interior_exterior":"外景","location":"旧宅门口","time":"夜","characters":["她"],'
+                '"must_cover_plot":["她在雨夜回到旧宅"],'
+                '"must_keep_dialogue":["她回来了。"],'
+                '"must_keep_visual_elements":["雨夜","旧宅门口"],'
+                '"must_keep_foreshadowing":["旧信"],'
+                '"scene_function":"建立人物回归","core_conflict":"她是否进入旧宅",'
+                '"adaptation_note":"补齐旧信伏笔并保留雨夜视觉元素"}]}'
+            )
         elif request.task_type == "script_generation":
             text = (
                 '{"scene_id":"S001","title":"雨夜归来","content_blocks":['
@@ -97,6 +109,17 @@ class FakeAnalysisLLMProvider(LLMProvider):
                     '"coverage":{"must_cover_plot":["她在雨夜回到旧宅"],"must_keep_dialogue":["她回来了。"],'
                     '"must_keep_visual_elements":["雨夜","旧宅门口"],"must_keep_foreshadowing":["旧信"]}}'
                 )
+        elif request.task_type == "script_scene_repair":
+            text = (
+                '{"scene_id":"S001","title":"雨夜归来","scene_info":"外景 / 旧宅门口 / 夜",'
+                '"characters":["她"],"scene_purpose":"建立人物回归","core_conflict":"她是否进入旧宅",'
+                '"content_blocks":['
+                '{"content_block_id":"CB001","type":"action","text":"她站在旧宅门口，雨水顺着门檐落下。",'
+                '"speaker":null,"source_evidence_ids":["EV001"]},'
+                '{"content_block_id":"CB002","type":"dialogue","text":"她回来了。",'
+                '"speaker":"她","source_evidence_ids":["EV001"]}'
+                ']}'
+            )
         else:
             text = "{}"
         return LLMResponse(text=text, model_name="fake-analysis", usage=LLMUsage(input_tokens=1, output_tokens=1))

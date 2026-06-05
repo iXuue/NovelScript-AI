@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.domain.artifacts import ArtifactStatus, ProjectStage
 from app.models.analysis import EvidenceItem
 from app.models.project import Project
+from app.models.repair import RepairAttempt
 from app.models.script import ScriptContentBlock, ScriptScene, ScriptSceneValidation, ScriptVersion
 from app.models.scene_plan import ScenePlan, ScenePlanScene
 from app.models.story import StoryBible
@@ -17,6 +18,7 @@ from app.services.store import STORE, now_utc
 
 
 BLOCK_TYPES = {"action", "dialogue", "narration", "transition", "note"}
+MAX_REPAIR_ATTEMPTS = 2
 
 
 def generate_script_from_confirmed_scene_plan(db: Session, project_id: str, llm_provider: LLMProvider | None) -> dict:
@@ -86,6 +88,79 @@ def get_current_yaml_preview(db: Session, project_id: str) -> dict | None:
     return _yaml_preview(version)
 
 
+def repair_script_scene(db: Session, project_id: str, scene_id: str, llm_provider: LLMProvider | None) -> dict:
+    version = _latest_script_version(db, project_id)
+    if version is None:
+        raise KeyError("script_missing")
+    script_scene = next((scene for scene in version.scenes if scene.scene_id == scene_id), None)
+    if script_scene is None:
+        raise KeyError("script_scene_missing")
+    validation = _latest_scene_validation(version, scene_id)
+    if validation is None or validation.passed:
+        raise PermissionError("script_scene_repair_not_required")
+    if (
+        _repair_attempt_count(
+            db,
+            project_id=project_id,
+            artifact_type="script_scene",
+            artifact_id=version.script_version_id,
+            scene_id=scene_id,
+        )
+        >= MAX_REPAIR_ATTEMPTS
+    ):
+        raise PermissionError("repair_attempts_exceeded")
+    scene_plan = _confirmed_scene_plan(db, project_id)
+    if scene_plan is None:
+        raise PermissionError("scene_plan_not_confirmed")
+    scene_plan_scene = next((scene for scene in scene_plan.scenes if scene.scene_id == scene_id), None)
+    if scene_plan_scene is None:
+        raise KeyError("scene_plan_scene_missing")
+    if llm_provider is None:
+        raise RuntimeError("LLM provider is required to repair script scene")
+
+    evidence_items = _evidence_items(db, project_id)
+    style_profile = _style_profile(db, project_id)
+    current_blocks = sorted([block for block in version.content_blocks if block.scene_id == scene_id], key=lambda block: block.order)
+    response = llm_provider.generate(
+        LLMRequest(
+            task_type="script_scene_repair",
+            prompt=_script_scene_repair_prompt(scene_plan_scene, script_scene, current_blocks, validation, evidence_items, style_profile),
+            response_format="json",
+        )
+    )
+    repaired_scene = _validate_script_scene_payload(
+        _load_json_object(response.text),
+        scene=scene_plan_scene,
+        evidence_ids={evidence.evidence_id for evidence in evidence_items},
+    )
+    _replace_script_scene_content(db, version, script_scene, repaired_scene)
+    repaired_validation = _validate_and_store_one_script_scene(db, version, scene_plan_scene, script_scene, evidence_items, style_profile, llm_provider)
+    all_passed = all(validation.passed for validation in version.scene_validations)
+    version.status = ArtifactStatus.current if all_passed else ArtifactStatus.failed
+    version.updated_at = now_utc()
+    db.commit()
+    _record_repair_attempt(
+        db,
+        project_id=project_id,
+        artifact_type="script_scene",
+        artifact_id=version.script_version_id,
+        result_artifact_id=version.script_version_id,
+        scene_id=scene_id,
+        issues=validation.issues,
+        status="success" if repaired_validation.passed else "failed",
+        source=response.model_name,
+    )
+    _mirror_script_to_store(project_id, version)
+    if all_passed:
+        update_project_stage(project_id, ProjectStage.script_ready)
+        update_project_stage_in_db(db, project_id, ProjectStage.script_ready)
+    return {
+        "script_version_id": version.script_version_id,
+        "scene_id": scene_id,
+        "validation": _validation_to_dict(repaired_validation),
+    }
+
+
 def _replace_script_version(db: Session, project_id: str, title: str, scenes: list[dict], source: str) -> ScriptVersion:
     db.execute(delete(ScriptVersion).where(ScriptVersion.project_id == project_id))
     timestamp = now_utc()
@@ -141,6 +216,40 @@ def _replace_script_version(db: Session, project_id: str, title: str, scenes: li
     return script_version
 
 
+def _replace_script_scene_content(db: Session, version: ScriptVersion, script_scene: ScriptScene, repaired_scene: dict) -> None:
+    script_scene.title = repaired_scene["title"]
+    script_scene.source_chapter_ids = repaired_scene["source_chapter_ids"]
+    script_scene.scene_info = repaired_scene["scene_info"]
+    script_scene.characters = repaired_scene["characters"]
+    script_scene.scene_purpose = repaired_scene["scene_purpose"]
+    script_scene.core_conflict = repaired_scene["core_conflict"]
+    script_scene.updated_at = now_utc()
+    db.execute(
+        delete(ScriptContentBlock).where(
+            ScriptContentBlock.script_version_id == version.script_version_id,
+            ScriptContentBlock.scene_id == script_scene.scene_id,
+        )
+    )
+    timestamp = now_utc()
+    for index, block in enumerate(repaired_scene["content_blocks"], start=1):
+        db.add(
+            ScriptContentBlock(
+                script_version_id=version.script_version_id,
+                project_id=version.project_id,
+                scene_id=script_scene.scene_id,
+                content_block_id=block["content_block_id"],
+                order=index,
+                block_type=block["type"],
+                text=block["text"],
+                speaker=block["speaker"],
+                source_evidence_ids=block["source_evidence_ids"],
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+    db.flush()
+
+
 def _script_scene_prompt(
     scene: ScenePlanScene,
     evidence_items: list[EvidenceItem],
@@ -188,37 +297,99 @@ def _validate_and_store_script_scenes(
     timestamp = now_utc()
     for script_scene in sorted(version.scenes, key=lambda scene: scene.order):
         scene_plan_scene = scene_plan_by_id[script_scene.scene_id]
-        response = llm_provider.generate(
-            LLMRequest(
-                task_type="script_scene_validation",
-                prompt=_script_scene_validation_prompt(
-                    scene_plan_scene,
-                    script_scene,
-                    sorted(script_blocks_by_scene.get(script_scene.scene_id, []), key=lambda block: block.order),
-                    evidence_items,
-                    style_profile,
-                ),
-                response_format="json",
-            )
-        )
-        payload = _validate_script_scene_validation_payload(_load_json_object(response.text))
-        validation = ScriptSceneValidation(
-            script_version_id=version.script_version_id,
-            project_id=version.project_id,
-            scene_id=script_scene.scene_id,
-            passed=payload["passed"],
-            issues=payload["issues"],
-            suggestions=payload["suggestions"],
-            coverage=payload["coverage"],
-            source=response.model_name,
-            created_at=timestamp,
-            updated_at=timestamp,
+        validation = _build_script_scene_validation(
+            version,
+            script_scene,
+            scene_plan_scene,
+            sorted(script_blocks_by_scene.get(script_scene.scene_id, []), key=lambda block: block.order),
+            evidence_items,
+            style_profile,
+            llm_provider,
+            timestamp,
         )
         db.add(validation)
         validations.append(validation)
     db.commit()
     db.refresh(version)
     return validations
+
+
+def _validate_and_store_one_script_scene(
+    db: Session,
+    version: ScriptVersion,
+    scene_plan_scene: ScenePlanScene,
+    script_scene: ScriptScene,
+    evidence_items: list[EvidenceItem],
+    style_profile: StyleProfile | None,
+    llm_provider: LLMProvider,
+) -> ScriptSceneValidation:
+    db.execute(
+        delete(ScriptSceneValidation).where(
+            ScriptSceneValidation.script_version_id == version.script_version_id,
+            ScriptSceneValidation.scene_id == script_scene.scene_id,
+        )
+    )
+    blocks = (
+        db.query(ScriptContentBlock)
+        .filter(
+            ScriptContentBlock.script_version_id == version.script_version_id,
+            ScriptContentBlock.scene_id == script_scene.scene_id,
+        )
+        .order_by(ScriptContentBlock.order)
+        .all()
+    )
+    validation = _build_script_scene_validation(
+        version,
+        script_scene,
+        scene_plan_scene,
+        blocks,
+        evidence_items,
+        style_profile,
+        llm_provider,
+        now_utc(),
+    )
+    db.add(validation)
+    db.commit()
+    db.refresh(version)
+    return validation
+
+
+def _build_script_scene_validation(
+    version: ScriptVersion,
+    script_scene: ScriptScene,
+    scene_plan_scene: ScenePlanScene,
+    content_blocks: list[ScriptContentBlock],
+    evidence_items: list[EvidenceItem],
+    style_profile: StyleProfile | None,
+    llm_provider: LLMProvider,
+    timestamp,
+) -> ScriptSceneValidation:
+    response = llm_provider.generate(
+        LLMRequest(
+            task_type="script_scene_validation",
+            prompt=_script_scene_validation_prompt(
+                scene_plan_scene,
+                script_scene,
+                content_blocks,
+                evidence_items,
+                style_profile,
+            ),
+            response_format="json",
+        )
+    )
+    payload = _validate_script_scene_validation_payload(_load_json_object(response.text))
+    return ScriptSceneValidation(
+        script_version_id=version.script_version_id,
+        project_id=version.project_id,
+        scene_id=script_scene.scene_id,
+        passed=payload["passed"],
+        issues=payload["issues"],
+        suggestions=payload["suggestions"],
+        coverage=payload["coverage"],
+        source=response.model_name,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
 
 
 def _script_scene_validation_prompt(
@@ -241,6 +412,34 @@ def _script_scene_validation_prompt(
         "- Dialogue blocks have speakers, block types are valid, and evidence references are coherent.\n"
         "- The scene reads as filmable screenplay content, not novel summary.\n"
         "- Style follows the style profile.\n\n"
+        f"scene_plan_scene:\n{_scene_block(scene_plan_scene)}\n\n"
+        f"script_scene:\n{_script_scene_block(script_scene)}\n\n"
+        f"content_blocks:\n{_script_block(content_blocks)}\n\n"
+        f"relevant_evidence:\n{_evidence_block(relevant_evidence)}\n\n"
+        f"style_profile:\n{style_profile.profile_text if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
+    )
+
+
+def _script_scene_repair_prompt(
+    scene_plan_scene: ScenePlanScene,
+    script_scene: ScriptScene,
+    content_blocks: list[ScriptContentBlock],
+    validation: ScriptSceneValidation,
+    evidence_items: list[EvidenceItem],
+    style_profile: StyleProfile | None,
+) -> str:
+    relevant_evidence = [evidence for evidence in evidence_items if evidence.evidence_id in scene_plan_scene.source_evidence_ids]
+    return (
+        "You are the Script Scene Repair Worker. Repair exactly one generated screenplay scene according to validation issues.\n"
+        "Return the full repaired scene as one JSON object. No Markdown. No explanation.\n"
+        "Use the same schema as script_generation for one scene.\n"
+        "Rules:\n"
+        "- Preserve valid content blocks when possible.\n"
+        "- Fix only issues identified by validation unless required for consistency.\n"
+        "- Keep block types limited to action, dialogue, narration, transition, note.\n"
+        "- Dialogue blocks must include speaker.\n\n"
+        f"validation_issues:\n{json.dumps(validation.issues, ensure_ascii=False)}\n\n"
+        f"validation_suggestions:\n{json.dumps(validation.suggestions, ensure_ascii=False)}\n\n"
         f"scene_plan_scene:\n{_scene_block(scene_plan_scene)}\n\n"
         f"script_scene:\n{_script_scene_block(script_scene)}\n\n"
         f"content_blocks:\n{_script_block(content_blocks)}\n\n"
@@ -354,6 +553,24 @@ def _current_script_version(db: Session, project_id: str) -> ScriptVersion | Non
         .filter(ScriptVersion.project_id == project_id, ScriptVersion.status == ArtifactStatus.current)
         .one_or_none()
     )
+
+
+def _latest_script_version(db: Session, project_id: str) -> ScriptVersion | None:
+    return (
+        db.query(ScriptVersion)
+        .filter(ScriptVersion.project_id == project_id)
+        .order_by(ScriptVersion.generated_at.desc())
+        .first()
+    )
+
+
+def _latest_scene_validation(version: ScriptVersion, scene_id: str) -> ScriptSceneValidation | None:
+    validations = sorted(
+        [validation for validation in version.scene_validations if validation.scene_id == scene_id],
+        key=lambda validation: validation.created_at,
+        reverse=True,
+    )
+    return validations[0] if validations else None
 
 
 def _evidence_items(db: Session, project_id: str) -> list[EvidenceItem]:
@@ -580,3 +797,61 @@ def _validation_to_dict(validation: ScriptSceneValidation | None) -> dict | None
         "source": validation.source,
         "created_at": validation.created_at,
     }
+
+
+def _record_repair_attempt(
+    db: Session,
+    project_id: str,
+    artifact_type: str,
+    artifact_id: str,
+    result_artifact_id: str | None,
+    scene_id: str | None,
+    issues: list,
+    status: str,
+    source: str,
+) -> RepairAttempt:
+    attempt_no = (
+        db.query(RepairAttempt)
+        .filter(
+            RepairAttempt.project_id == project_id,
+            RepairAttempt.artifact_type == artifact_type,
+            RepairAttempt.artifact_id == artifact_id,
+            RepairAttempt.scene_id == scene_id,
+        )
+        .count()
+        + 1
+    )
+    attempt = RepairAttempt(
+        project_id=project_id,
+        artifact_type=artifact_type,
+        artifact_id=artifact_id,
+        result_artifact_id=result_artifact_id,
+        scene_id=scene_id,
+        attempt_no=attempt_no,
+        issues=issues,
+        status=status,
+        source=source,
+        created_at=now_utc(),
+    )
+    db.add(attempt)
+    db.commit()
+    return attempt
+
+
+def _repair_attempt_count(
+    db: Session,
+    project_id: str,
+    artifact_type: str,
+    artifact_id: str,
+    scene_id: str | None,
+) -> int:
+    return (
+        db.query(RepairAttempt)
+        .filter(
+            RepairAttempt.project_id == project_id,
+            RepairAttempt.artifact_type == artifact_type,
+            RepairAttempt.artifact_id == artifact_id,
+            RepairAttempt.scene_id == scene_id,
+        )
+        .count()
+    )
