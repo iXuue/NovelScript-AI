@@ -28,3 +28,4 @@ class Project(Base):
     story_bibles = relationship("StoryBible", back_populates="project", cascade="all, delete-orphan")
     scene_plans = relationship("ScenePlan", back_populates="project", cascade="all, delete-orphan")
     script_versions = relationship("ScriptVersion", back_populates="project", cascade="all, delete-orphan")
+    repair_attempts = relationship("RepairAttempt", back_populates="project", cascade="all, delete-orphan")
