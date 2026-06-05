@@ -9,6 +9,9 @@ class Settings:
     database_url: str = "postgresql+psycopg://novelscript:novelscript@postgres:5432/novelscript"
     local_developer_logs_enabled: bool = True
     storage_root: str = "/app/storage"
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4.1-mini"
 
 
 def get_settings() -> Settings:
@@ -21,5 +24,8 @@ def get_settings() -> Settings:
         local_developer_logs_enabled=os.getenv("LOCAL_DEVELOPER_LOGS_ENABLED", "true").lower()
         == "true",
         storage_root=os.getenv("STORAGE_ROOT", "/app/storage"),
+        openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+        openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+        openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
     )
 
