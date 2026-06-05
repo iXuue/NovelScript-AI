@@ -20,3 +20,5 @@ class Project(Base):
     chapters = relationship("Chapter", back_populates="project", cascade="all, delete-orphan")
     paragraphs = relationship("Paragraph", back_populates="project", cascade="all, delete-orphan")
     checkpoints = relationship("Checkpoint", back_populates="project", cascade="all, delete-orphan")
+    chapter_summaries = relationship("ChapterSummary", back_populates="project", cascade="all, delete-orphan")
+    evidence_items = relationship("EvidenceItem", back_populates="project", cascade="all, delete-orphan")
