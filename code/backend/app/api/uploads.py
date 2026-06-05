@@ -1,37 +1,53 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.api.errors import api_error
+from app.core.database import get_db
 from app.domain.artifacts import ProjectStage
-from app.services.chapter_service import assign_paragraph_ids, detect_chapters
+from app.services.chapter_service import UploadedMarkdownDocument, assign_paragraph_ids, detect_documents_chapters
+from app.services.chapter_persistence_service import replace_project_chapters
 from app.services.checkpoint_service import create_checkpoint
-from app.services.input_adapter import normalize_to_markdown, parse_multipart_file
-from app.services.project_service import require_project, update_project_stage
+from app.services.input_adapter import normalize_to_markdown
+from app.services.project_service import require_project, update_project_stage, update_project_stage_in_db
 from app.services.store import STORE
 
 router = APIRouter()
 
 
 @router.post("/projects/{project_id}/uploads")
-async def upload_novel(project_id: str, request: Request):
+async def upload_novel(project_id: str, request: Request, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
-        payload = parse_multipart_file(await request.body(), request.headers.get("content-type", ""))
-        markdown = normalize_to_markdown(payload.filename, payload.content)
+        form = await request.form()
+        uploads = [item for item in [*form.getlist("files"), *form.getlist("file")] if hasattr(item, "read")]
+        if not uploads:
+            raise ValueError("file field is required")
+        documents = []
+        for upload in uploads:
+            content = await upload.read()
+            documents.append(
+                UploadedMarkdownDocument(
+                    filename=upload.filename or "upload.txt",
+                    markdown=normalize_to_markdown(upload.filename or "upload.txt", content),
+                )
+            )
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
     except ValueError as exc:
         code = "unsupported_media_type" if "unsupported" in str(exc) or ".doc" in str(exc) else "validation_error"
         raise api_error(415 if code == "unsupported_media_type" else 400, code, str(exc))
 
-    chapters = detect_chapters(markdown)
+    chapters = assign_paragraph_ids(detect_documents_chapters(documents))
     drafts = [chapter.to_draft() for chapter in chapters]
     STORE.chapters_pending[project_id] = drafts
     STORE.chapter_paragraphs[project_id] = [
         {"chapter_id": chapter.chapter_id, "paragraphs": chapter.paragraphs}
-        for chapter in assign_paragraph_ids(chapters)
+        for chapter in chapters
     ]
+    replace_project_chapters(db, project_id, chapters)
     update_project_stage(project_id, ProjectStage.chapters_pending)
+    update_project_stage_in_db(db, project_id, ProjectStage.chapters_pending)
     return {
         "file_id": STORE.next_id("file"),
         "project_id": project_id,

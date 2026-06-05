@@ -1,7 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from app.api.errors import api_error
+from app.core.database import get_db
 from app.services.project_service import create_project, get_project, list_projects
 
 router = APIRouter()
@@ -12,8 +14,8 @@ class CreateProjectRequest(BaseModel):
 
 
 @router.post("/projects")
-def create_project_endpoint(payload: CreateProjectRequest):
-    return create_project(name=payload.name)
+def create_project_endpoint(payload: CreateProjectRequest, db: Session = Depends(get_db)):
+    return create_project(db, name=payload.name)
 
 
 @router.get("/projects")

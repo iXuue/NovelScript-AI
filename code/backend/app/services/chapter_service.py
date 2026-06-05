@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 import re
 
 
@@ -29,11 +30,37 @@ class DetectedChapter:
         }
 
 
-HEADING_RE = re.compile(r"^(?:#{1,6}\s*)?((?:第[一二三四五六七八九十百千万0-9]+章|Chapter\s+\d+).*)$", re.I)
+@dataclass(frozen=True)
+class UploadedMarkdownDocument:
+    filename: str
+    markdown: str
+
+
+HEADING_RE = re.compile(
+    r"^(?:#{1,6}\s*)?("
+    r"(?:第[一二三四五六七八九十百千万两0-9]+章.*)|"
+    r"(?:Chapter\s+\d+\b.*)|"
+    r"(?:[一二三四五六七八九十]+、\S.*)|"
+    r"(?:\d+[.．]\s*\S.*)|"
+    r"(?:序章|楔子|番外(?:\s+\S.*)?)"
+    r")$",
+    re.I,
+)
+NATURAL_SORT_RE = re.compile(r"(\d+)")
 
 
 def split_paragraphs(text: str) -> list[str]:
     return [p.strip() for p in re.split(r"\n\s*\n+", text.strip()) if p.strip()]
+
+
+def natural_sort_key(value: str) -> list[int | str]:
+    parts: list[int | str] = []
+    for part in NATURAL_SORT_RE.split(value):
+        if part.isdigit():
+            parts.append(int(part))
+        elif part:
+            parts.append(part.lower())
+    return parts
 
 
 def detect_chapters(markdown: str) -> list[DetectedChapter]:
@@ -66,6 +93,25 @@ def detect_chapters(markdown: str) -> list[DetectedChapter]:
             raw_text="\n".join(lines).strip(),
         )
         for index, (title, lines) in enumerate(chapters, start=1)
+    ]
+
+
+def detect_documents_chapters(documents: list[UploadedMarkdownDocument]) -> list[DetectedChapter]:
+    detected: list[DetectedChapter] = []
+    for document in sorted(documents, key=lambda item: natural_sort_key(item.filename)):
+        document_chapters = detect_chapters(document.markdown)
+        if len(document_chapters) == 1 and document_chapters[0].title == "正文":
+            document_chapters[0].title = Path(document.filename).stem
+        detected.extend(document_chapters)
+
+    return [
+        DetectedChapter(
+            chapter_id=f"CH{index:03d}",
+            title=chapter.title,
+            order=index,
+            raw_text=chapter.raw_text,
+        )
+        for index, chapter in enumerate(detected, start=1)
     ]
 
 
