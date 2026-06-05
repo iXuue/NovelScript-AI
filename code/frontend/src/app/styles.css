@@ -3719,3 +3719,53 @@ body {
   outline: 3px solid rgba(85, 205, 234, 0.72);
   outline-offset: 2px;
 }
+
+/* White gradient button borders. */
+.figma-primary,
+.figma-secondary,
+.figma-file-button,
+.figma-style-pill,
+.figma-nav-item.active,
+.figma-workspace .ghost-button {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.42)) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.28) 45%, rgba(255, 255, 255, 0.86)) border-box;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.figma-primary {
+  background:
+    linear-gradient(180deg, #87e1ff 0%, #55cdea 100%) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.3) 46%, rgba(255, 255, 255, 0.92)) border-box;
+  box-shadow: 0 10px 22px rgba(85, 205, 234, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+
+.figma-primary:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, #fa7a77 0%, #e36d6b 100%) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.34) 46%, rgba(255, 255, 255, 0.9)) border-box;
+  box-shadow: 0 10px 24px rgba(227, 109, 107, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.figma-primary:active:not(:disabled) {
+  background:
+    linear-gradient(180deg, #e36d6b 0%, #d95f5d 100%) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.24) 46%, rgba(255, 255, 255, 0.8)) border-box;
+}
+
+.figma-style-pill.active,
+.figma-nav-item.active {
+  background:
+    linear-gradient(180deg, rgba(135, 225, 255, 0.76), rgba(255, 229, 228, 0.72)) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.3) 44%, rgba(255, 255, 255, 0.9)) border-box;
+}
+
+.figma-secondary:hover:not(:disabled),
+.figma-file-button:hover,
+.figma-style-pill:hover:not(:disabled),
+.figma-workspace .ghost-button:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(135, 225, 255, 0.28), rgba(255, 255, 255, 0.66)) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.32) 45%, rgba(255, 255, 255, 0.88)) border-box;
+}
