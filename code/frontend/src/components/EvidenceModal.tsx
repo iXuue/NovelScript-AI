@@ -6,11 +6,12 @@ import type { EvidenceLookupResult } from "../types";
 type Props = {
   projectId: string;
   contentBlockId: string;
+  fallback?: EvidenceLookupResult;
   onClose: () => void;
 };
 
-export function EvidenceModal({ projectId, contentBlockId, onClose }: Props) {
-  const [result, setResult] = useState<EvidenceLookupResult | null>(null);
+export function EvidenceModal({ projectId, contentBlockId, fallback, onClose }: Props) {
+  const [result, setResult] = useState<EvidenceLookupResult | null>(fallback ?? null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,7 +24,11 @@ export function EvidenceModal({ projectId, contentBlockId, onClose }: Props) {
       })
       .catch((err: Error) => {
         if (mounted) {
-          setError(err.message);
+          if (fallback) {
+            setResult(fallback);
+          } else {
+            setError(err.message);
+          }
         }
       });
     return () => {

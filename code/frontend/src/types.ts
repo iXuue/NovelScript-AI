@@ -105,3 +105,15 @@ export type ConversationMessage = {
   created_at: string;
 };
 
+export type ExportFormat = "yaml" | "markdown" | "docx" | "pdf" | "txt" | "clean_json";
+
+export type ExportResult = {
+  export_id: string;
+  format: string;
+  status: string;
+  download_url: string;
+};
+
+export type WorkspaceView = "conversation" | "scene-plan" | "script";
+
+export type UiMode = "live" | "demo";

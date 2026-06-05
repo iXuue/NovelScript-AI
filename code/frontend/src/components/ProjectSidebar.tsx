@@ -34,6 +34,7 @@ export function ProjectSidebar({
             新建项目
           </button>
           <div className="section-label">项目</div>
+          <div className="current-project-name">{currentProject.name}</div>
           <div className="project-list">
             {projects.map((project) => (
               <button
@@ -80,4 +81,3 @@ export function ProjectSidebar({
     </aside>
   );
 }
-

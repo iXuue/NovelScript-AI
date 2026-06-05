@@ -2,13 +2,16 @@ import type {
   AgentProgress,
   ChapterDraft,
   EvidenceLookupResult,
+  ExportFormat,
+  ExportResult,
   ProjectStage,
   ProjectSummary,
   RunStatus,
   ScenePlan,
   ScriptCurrentForUi,
   ScriptPreview,
-  StyleSource
+  StyleSource,
+  ConversationMessage
 } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -37,6 +40,14 @@ export async function createProject(name: string): Promise<ProjectSummary> {
 
 export async function listProjects(): Promise<ProjectSummary[]> {
   return requestJson<ProjectSummary[]>("/projects");
+}
+
+export async function getProject(projectId: string): Promise<ProjectSummary> {
+  return requestJson<ProjectSummary>(`/projects/${projectId}`);
+}
+
+export async function getPendingChapters(projectId: string): Promise<{ chapters: ChapterDraft[] }> {
+  return requestJson<{ chapters: ChapterDraft[] }>(`/projects/${projectId}/chapters/pending`);
 }
 
 export async function uploadNovel(
@@ -78,6 +89,12 @@ export async function clearStyleSource(projectId: string): Promise<void> {
   await requestJson<void>(`/projects/${projectId}/style-source`, { method: "DELETE" });
 }
 
+export async function getStyleSource(
+  projectId: string
+): Promise<{ project_id: string; style_source: StyleSource | null; style_locked: boolean }> {
+  return requestJson(`/projects/${projectId}/style-source`);
+}
+
 export async function getRun(projectId: string, runId: string): Promise<AgentProgress> {
   return requestJson<AgentProgress>(`/projects/${projectId}/runs/${runId}`);
 }
@@ -115,6 +132,13 @@ export async function getYamlPreview(projectId: string): Promise<ScriptPreview> 
   return requestJson<ScriptPreview>(`/projects/${projectId}/scripts/current/yaml-preview`);
 }
 
+export async function getPrimaryMessages(projectId: string): Promise<{
+  conversation_id: string;
+  messages: ConversationMessage[];
+}> {
+  return requestJson(`/projects/${projectId}/conversations/primary/messages`);
+}
+
 export async function sendMessage(
   projectId: string,
   content: string
@@ -145,12 +169,11 @@ export async function getEvidenceByContentBlock(
 
 export async function createExport(
   projectId: string,
-  format: "yaml" | "markdown" | "docx" | "pdf" | "txt" | "clean_json"
-): Promise<{ export_id: string; format: string; status: string; download_url: string }> {
+  format: ExportFormat
+): Promise<ExportResult> {
   return requestJson(`/projects/${projectId}/exports`, { method: "POST", body: JSON.stringify({ format }) });
 }
 
 export async function getActiveRun(projectId: string): Promise<AgentProgress | null> {
   return requestJson<AgentProgress | null>(`/projects/${projectId}/runs/active`);
 }
-

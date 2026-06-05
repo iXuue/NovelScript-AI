@@ -4,6 +4,7 @@ import type { AgentProgress as AgentProgressType } from "../types";
 
 type Props = {
   progress: AgentProgressType | null;
+  activeLabel: string | null;
 };
 
 const defaultSteps = [
@@ -19,7 +20,7 @@ const defaultSteps = [
   "正在运行校验与修复"
 ];
 
-export function AgentProgress({ progress }: Props) {
+export function AgentProgress({ progress, activeLabel }: Props) {
   const [open, setOpen] = useState(true);
   const steps = progress?.steps.map((step) => step.summary) ?? defaultSteps;
 
@@ -28,6 +29,7 @@ export function AgentProgress({ progress }: Props) {
       <button className="collapse-button" type="button" onClick={() => setOpen((value) => !value)}>
         <span aria-hidden="true">{open ? "v" : ">"}</span>
         Agent 执行进度
+        {activeLabel ? <span className="active-step">{activeLabel}</span> : null}
       </button>
       {open ? (
         <ol>

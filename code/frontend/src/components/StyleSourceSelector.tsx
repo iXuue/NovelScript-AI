@@ -12,11 +12,13 @@ const builtins = [
 
 type Props = {
   locked: boolean;
+  loading: boolean;
   selected: StyleSource | null;
   onChange: (source: StyleSource | null) => void;
+  onReferenceFileSelected: (file: File) => void;
 };
 
-export function StyleSourceSelector({ locked, selected, onChange }: Props) {
+export function StyleSourceSelector({ locked, loading, selected, onChange, onReferenceFileSelected }: Props) {
   const [customText, setCustomText] = useState("");
   const [referenceFileName, setReferenceFileName] = useState("");
   const hasText = customText.trim().length > 0;
@@ -30,7 +32,7 @@ export function StyleSourceSelector({ locked, selected, onChange }: Props) {
           <button
             key={style.key}
             className={selected?.kind === "builtin" && selected.builtin_style === style.key ? "style-card active" : "style-card"}
-            disabled={locked}
+            disabled={locked || loading}
             type="button"
             onClick={() => onChange({ kind: "builtin", builtin_style: style.key })}
           >
@@ -43,12 +45,15 @@ export function StyleSourceSelector({ locked, selected, onChange }: Props) {
         <textarea
           id="custom-style-text"
           value={customText}
-          disabled={locked || hasReference}
+          disabled={locked || loading || hasReference}
           rows={3}
           placeholder="例如：对白短促，节奏紧张，保留现实质感。"
           onChange={(event) => {
             const value = event.target.value;
             setCustomText(value);
+            if (referenceFileName) {
+              setReferenceFileName("");
+            }
             onChange(value.trim() ? { kind: "custom_text", style_text: value } : null);
           }}
         />
@@ -56,14 +61,14 @@ export function StyleSourceSelector({ locked, selected, onChange }: Props) {
           <span>历史剧本参考</span>
           <input
             aria-label="上传历史剧本参考"
-            disabled={locked || hasText}
+            disabled={locked || loading || hasText}
             type="file"
             accept=".md,.txt,.docx,.pdf"
             onChange={(event) => {
               const file = event.target.files?.[0];
               setReferenceFileName(file?.name ?? "");
               if (file) {
-                onChange({ kind: "reference_scripts", reference_file_ids: ["pending_upload"] });
+                onReferenceFileSelected(file);
               }
             }}
           />
