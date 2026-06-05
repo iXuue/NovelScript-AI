@@ -3476,3 +3476,246 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Light pastel palette pass based on the pink/cyan reference. */
+.figma-workspace {
+  --figma-bg: #f7fbff;
+  --figma-panel: rgba(255, 255, 255, 0.78);
+  --figma-panel-strong: rgba(255, 255, 255, 0.9);
+  --figma-panel-muted: rgba(135, 225, 255, 0.18);
+  --figma-panel-soft: rgba(255, 229, 228, 0.42);
+  --figma-line: rgba(113, 154, 180, 0.24);
+  --figma-line-soft: rgba(113, 154, 180, 0.16);
+  --figma-text: #172033;
+  --figma-muted: #697386;
+  --figma-primary: #55cdea;
+  --figma-primary-hover: #fa7a77;
+  --figma-primary-soft: rgba(135, 225, 255, 0.28);
+  --figma-danger: #c23a45;
+  --figma-success: #0d8b61;
+  background:
+    radial-gradient(circle at 16% 14%, rgba(250, 122, 119, 0.26), transparent 30%),
+    radial-gradient(circle at 36% 55%, rgba(135, 225, 255, 0.38), transparent 34%),
+    radial-gradient(circle at 74% 20%, rgba(255, 229, 228, 0.72), transparent 30%),
+    linear-gradient(115deg, #fff7f7 0%, #f7fbff 45%, #dff5fc 100%);
+  color: var(--figma-text);
+}
+
+.figma-sidebar,
+.figma-conversation,
+.figma-result-panel {
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--figma-text);
+}
+
+.figma-sidebar {
+  border-right: 1px solid var(--figma-line);
+}
+
+.figma-conversation {
+  background: rgba(255, 255, 255, 0.46);
+  border-right: 1px solid var(--figma-line);
+}
+
+.figma-result-panel {
+  background: rgba(245, 253, 255, 0.74);
+}
+
+.figma-brand-row,
+.figma-panel-header,
+.figma-style-source,
+.figma-composer,
+.figma-result-header {
+  border-color: var(--figma-line);
+}
+
+.figma-brand-title,
+.figma-panel-header h1,
+.figma-style-summary h2,
+.figma-style-header h2,
+.figma-result-header h2,
+.figma-result-title-row h2,
+.figma-result-title-row h3,
+.figma-result-empty h3,
+.figma-empty-prompt h2,
+.figma-message-placeholder strong,
+.figma-scene-card-title strong,
+.figma-scene-card dd,
+.figma-table-row span {
+  color: var(--figma-text);
+}
+
+.figma-brand-subtitle,
+.figma-section-label,
+.figma-file-name,
+.figma-current-project small,
+.figma-nav-item small,
+.figma-progress-trigger small,
+.figma-empty-prompt p,
+.figma-message-placeholder,
+.figma-message-placeholder span,
+.figma-result-empty p,
+.figma-result-title-row p,
+.figma-scene-card p {
+  color: var(--figma-muted);
+}
+
+.figma-panel-header,
+.figma-style-source,
+.figma-conversation-body,
+.figma-composer {
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.figma-result-header {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.figma-status,
+.figma-connection,
+.figma-current-project,
+.figma-empty-prompt,
+.figma-message,
+.figma-agent-progress,
+.figma-chapter-confirmation,
+.figma-scene-plan,
+.figma-script-panel,
+.figma-result-empty,
+.figma-failure,
+.figma-scene-card,
+.figma-style-pill,
+.figma-file-button,
+.figma-secondary,
+.figma-workspace .ghost-button {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--figma-line);
+  color: var(--figma-text);
+}
+
+.figma-status,
+.figma-connection {
+  color: #496579;
+}
+
+.figma-status-dot {
+  background: #55cdea;
+}
+
+.figma-primary {
+  background: linear-gradient(180deg, #87e1ff 0%, #55cdea 100%);
+  border: 1px solid rgba(42, 176, 214, 0.5);
+  box-shadow: 0 10px 22px rgba(85, 205, 234, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+  color: #122238;
+}
+
+.figma-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fa7a77 0%, #e36d6b 100%);
+  border-color: rgba(201, 76, 76, 0.48);
+  box-shadow: 0 10px 24px rgba(227, 109, 107, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.54);
+  color: #1f1113;
+}
+
+.figma-primary:active:not(:disabled) {
+  background: #e36d6b;
+  border-color: #c94c4c;
+  color: #1f1113;
+}
+
+.figma-nav-item,
+.figma-scene-link,
+.figma-style-trigger,
+.figma-progress-trigger,
+.figma-icon-button,
+.figma-workspace .export-menu select {
+  color: var(--figma-text);
+}
+
+.figma-nav-item:hover,
+.figma-scene-link:hover,
+.figma-current-project:hover,
+.figma-style-trigger:hover:not(:disabled),
+.figma-style-pill:hover:not(:disabled),
+.figma-secondary:hover:not(:disabled),
+.figma-file-button:hover,
+.figma-progress-trigger:hover,
+.figma-workspace .ghost-button:hover:not(:disabled) {
+  background: rgba(135, 225, 255, 0.22);
+  border-color: rgba(85, 205, 234, 0.42);
+  color: #172033;
+}
+
+.figma-nav-item.active,
+.figma-style-pill.active {
+  background: linear-gradient(180deg, rgba(135, 225, 255, 0.76), rgba(255, 229, 228, 0.72));
+  border-color: rgba(85, 205, 234, 0.62);
+  color: #172033;
+}
+
+.figma-lock-badge {
+  background: rgba(13, 139, 97, 0.1);
+  border-color: rgba(13, 139, 97, 0.22);
+  color: #0d6b4c;
+}
+
+.figma-new-project input,
+.figma-style-custom textarea,
+.figma-reference-upload input,
+.figma-composer input[type="text"],
+.figma-result-header select,
+.figma-workspace .export-menu select {
+  background: rgba(255, 255, 255, 0.76);
+  border-color: var(--figma-line);
+  color: var(--figma-text);
+}
+
+.figma-workspace input::placeholder,
+.figma-workspace textarea::placeholder {
+  color: rgba(105, 115, 134, 0.72);
+}
+
+.figma-message.user {
+  background: linear-gradient(180deg, #87e1ff, #58d1ed);
+  border-color: rgba(42, 176, 214, 0.45);
+  color: #122238;
+}
+
+.figma-table-row.head {
+  background: rgba(135, 225, 255, 0.22);
+  color: #496579;
+}
+
+.figma-empty-mark {
+  border-color: #78cfe7;
+}
+
+.figma-empty-mark::before {
+  border-color: #78cfe7;
+}
+
+.figma-empty-mark::after {
+  background: #78cfe7;
+}
+
+.figma-workspace .yaml-preview {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--figma-line);
+  color: #172033;
+}
+
+.figma-workspace .modal-scrim {
+  background: rgba(230, 240, 247, 0.68);
+}
+
+.figma-workspace .evidence-modal {
+  background: #ffffff;
+  border-color: var(--figma-line);
+  color: var(--figma-text);
+}
+
+.figma-workspace button:focus-visible,
+.figma-workspace input:focus-visible,
+.figma-workspace textarea:focus-visible,
+.figma-workspace select:focus-visible {
+  outline: 3px solid rgba(85, 205, 234, 0.72);
+  outline-offset: 2px;
+}
