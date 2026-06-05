@@ -426,7 +426,7 @@ export default function App({ initialYaml }: AppProps) {
   }
 
   return (
-    <div className="workspace">
+    <div className="figma-workspace">
       <header className="topbar">
         <div className="brand-block">
           <div className="product-name">NovelScript AI</div>
@@ -452,10 +452,16 @@ export default function App({ initialYaml }: AppProps) {
         <ProjectSidebar
           collapsed={sidebarCollapsed}
           currentProject={activeProject}
+          error={error}
+          loading={loading}
+          mode={mode}
+          newProjectName={newProjectName}
           projects={projects}
           scenePlan={scenePlan}
+          statusMessage={statusMessage}
           viewMode={viewMode}
           onNewProject={handleNewProject}
+          onNewProjectNameChange={setNewProjectName}
           onSelectProject={(projectId) => {
             setActiveProjectId(projectId);
             resetArtifactsForProject();
@@ -467,12 +473,17 @@ export default function App({ initialYaml }: AppProps) {
           activeLabel={loadingLabel}
           chapters={chapters}
           chaptersConfirmed={chaptersConfirmed}
+          error={error}
           hasNovelUpload={hasNovelUpload}
           loading={loading}
           messages={messages}
+          mode={mode}
           progress={progress}
+          projectName={activeProject.name}
           selectedStyle={styleSourceValue}
+          statusMessage={statusMessage}
           styleLocked={styleLocked}
+          uploadedNovelName={uploadedNovelName}
           onConfirmChapters={handleConfirmChapters}
           onNovelSelected={handleNovelSelected}
           onStyleChange={handleStyleSourceChange}
@@ -482,6 +493,7 @@ export default function App({ initialYaml }: AppProps) {
         <ResultPane
           failedStage={failedStage}
           fallbackEvidence={fallbackEvidence}
+          latestExport={latestExport}
           loading={loading}
           projectId={activeProject.project_id}
           scenePlan={scenePlan}
@@ -491,6 +503,7 @@ export default function App({ initialYaml }: AppProps) {
           viewMode={viewMode}
           yaml={scriptPreview?.yaml ?? null}
           onConfirmScenePlan={handleConfirmScenePlan}
+          onExport={handleExport}
           onGenerateScenePlan={handleGenerateScenePlan}
           onGenerateScript={handleGenerateScript}
         />

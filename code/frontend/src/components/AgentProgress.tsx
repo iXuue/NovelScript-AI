@@ -20,7 +20,7 @@ const defaultSteps = [
   "正在运行校验与修复"
 ];
 
-export function AgentProgress({ progress, activeLabel }: Props) {
+function LegacyAgentProgress({ progress, activeLabel }: Props) {
   const [open, setOpen] = useState(true);
   const steps = progress?.steps.map((step) => step.summary) ?? defaultSteps;
 
@@ -35,6 +35,33 @@ export function AgentProgress({ progress, activeLabel }: Props) {
         <ol>
           {steps.map((step) => (
             <li key={step}>{step}</li>
+          ))}
+        </ol>
+      ) : null}
+    </section>
+  );
+}
+
+export function AgentProgress({ progress, activeLabel }: Props) {
+  const [open, setOpen] = useState(false);
+  const steps = progress?.steps.map((step) => step.summary) ?? defaultSteps;
+  const completed = progress?.steps.filter((step) => step.status === "succeeded").length ?? 0;
+  const total = progress?.steps.length ?? steps.length;
+
+  return (
+    <section className="figma-agent-progress">
+      <button className="figma-progress-trigger" type="button" onClick={() => setOpen((value) => !value)}>
+        <span className={open ? "figma-chevron open" : "figma-chevron"} aria-hidden="true" />
+        <span>Agent 执行进度</span>
+        {activeLabel ? <small>{activeLabel}</small> : <small>{completed}/{total}</small>}
+      </button>
+      {open ? (
+        <ol className="figma-progress-steps">
+          {steps.map((step, index) => (
+            <li key={`${step}-${index}`}>
+              <span className={index < completed ? "done" : index === completed ? "running" : ""} aria-hidden="true" />
+              <span>{step}</span>
+            </li>
           ))}
         </ol>
       ) : null}
