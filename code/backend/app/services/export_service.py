@@ -5,6 +5,22 @@ import yaml
 
 
 INTERNAL_KEYS = {"content_block_id", "source_evidence_ids", "paragraph_id", "traceability_index"}
+EXPORT_EXTENSIONS = {
+    "yaml": "yaml",
+    "markdown": "md",
+    "docx": "docx",
+    "pdf": "pdf",
+    "txt": "txt",
+    "clean_json": "json",
+}
+EXPORT_CONTENT_TYPES = {
+    "yaml": "application/x-yaml; charset=utf-8",
+    "markdown": "text/markdown; charset=utf-8",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pdf": "application/pdf",
+    "txt": "text/plain; charset=utf-8",
+    "clean_json": "application/json; charset=utf-8",
+}
 
 
 def _remove_internal(value):
@@ -26,13 +42,12 @@ def to_yaml_preview(internal_or_clean: dict) -> str:
 
 def serialize_export(internal: dict, export_format: str) -> str:
     clean = to_user_clean_json(internal)
-    if export_format == "clean_json":
-        return json.dumps(clean, ensure_ascii=False, indent=2)
     if export_format == "yaml":
         return to_yaml_preview(clean)
+    if export_format == "clean_json":
+        return json.dumps(clean, ensure_ascii=False, indent=2)
     if export_format in {"markdown", "txt"}:
         return to_yaml_preview(clean)
     if export_format in {"docx", "pdf"}:
         return to_yaml_preview(clean)
     raise ValueError(f"unsupported export format: {export_format}")
-
