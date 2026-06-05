@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.services.llm_provider import LLMProvider, get_llm_provider
 from app.services.orchestrator_service import confirm_scene_plan, generate_scene_plan
 from app.services.project_service import require_project
-from app.services.store import STORE
+from app.services.scene_plan_service import get_current_scene_plan
 
 router = APIRouter()
 
@@ -31,22 +31,22 @@ def generate_scene_plan_endpoint(
 
 
 @router.get("/projects/{project_id}/scene-plan")
-def get_scene_plan_endpoint(project_id: str):
+def get_scene_plan_endpoint(project_id: str, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
-    scene_plan = STORE.scene_plans.get(project_id)
+    scene_plan = get_current_scene_plan(db, project_id)
     if scene_plan is None:
         raise api_error(404, "scene_plan_not_found", "Scene Plan not found")
     return scene_plan
 
 
 @router.post("/projects/{project_id}/scene-plan/confirm")
-def confirm_scene_plan_endpoint(project_id: str, payload: ConfirmScenePlanRequest):
+def confirm_scene_plan_endpoint(project_id: str, payload: ConfirmScenePlanRequest, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
-        return confirm_scene_plan(project_id, payload.confirmation_source, payload.message_id)
+        return confirm_scene_plan(project_id, payload.confirmation_source, payload.message_id, db)
     except KeyError:
         raise api_error(404, "scene_plan_not_found", "Scene Plan not found")
 

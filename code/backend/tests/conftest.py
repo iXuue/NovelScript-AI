@@ -50,6 +50,18 @@ class FakeAnalysisLLMProvider(LLMProvider):
                 '"timeline":["雨夜归来"],"central_conflict":"主角归来后面对未知阻力",'
                 '"foreshadowing":["旧信"]}'
             )
+        elif request.task_type == "scene_plan":
+            text = (
+                '{"scenes":[{"scene_id":"S001","order":1,"title":"雨夜归来",'
+                '"source_chapter_ids":["CH001"],"source_evidence_ids":["EV001"],'
+                '"interior_exterior":"外景","location":"旧宅门口","time":"夜","characters":["她"],'
+                '"must_cover_plot":["她在雨夜回到旧宅"],'
+                '"must_keep_dialogue":["她回来了。"],'
+                '"must_keep_visual_elements":["雨夜","旧宅门口"],'
+                '"must_keep_foreshadowing":["旧信"],'
+                '"scene_function":"建立人物回归","core_conflict":"她是否进入旧宅",'
+                '"adaptation_note":"保留雨夜视觉元素"}]}'
+            )
         else:
             text = "{}"
         return LLMResponse(text=text, model_name="fake-analysis", usage=LLMUsage(input_tokens=1, output_tokens=1))

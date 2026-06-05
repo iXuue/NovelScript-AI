@@ -26,3 +26,4 @@ class Project(Base):
     style_reference_files = relationship("StyleReferenceFile", back_populates="project", cascade="all, delete-orphan")
     style_profiles = relationship("StyleProfile", back_populates="project", cascade="all, delete-orphan")
     story_bibles = relationship("StoryBible", back_populates="project", cascade="all, delete-orphan")
+    scene_plans = relationship("ScenePlan", back_populates="project", cascade="all, delete-orphan")
