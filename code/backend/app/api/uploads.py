@@ -1,19 +1,22 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.api.errors import api_error
+from app.core.database import get_db
 from app.domain.artifacts import ProjectStage
 from app.services.chapter_service import UploadedMarkdownDocument, assign_paragraph_ids, detect_documents_chapters
+from app.services.chapter_persistence_service import replace_project_chapters
 from app.services.checkpoint_service import create_checkpoint
 from app.services.input_adapter import normalize_to_markdown
-from app.services.project_service import require_project, update_project_stage
+from app.services.project_service import require_project, update_project_stage, update_project_stage_in_db
 from app.services.store import STORE
 
 router = APIRouter()
 
 
 @router.post("/projects/{project_id}/uploads")
-async def upload_novel(project_id: str, request: Request):
+async def upload_novel(project_id: str, request: Request, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
         form = await request.form()
@@ -35,14 +38,16 @@ async def upload_novel(project_id: str, request: Request):
         code = "unsupported_media_type" if "unsupported" in str(exc) or ".doc" in str(exc) else "validation_error"
         raise api_error(415 if code == "unsupported_media_type" else 400, code, str(exc))
 
-    chapters = detect_documents_chapters(documents)
+    chapters = assign_paragraph_ids(detect_documents_chapters(documents))
     drafts = [chapter.to_draft() for chapter in chapters]
     STORE.chapters_pending[project_id] = drafts
     STORE.chapter_paragraphs[project_id] = [
         {"chapter_id": chapter.chapter_id, "paragraphs": chapter.paragraphs}
-        for chapter in assign_paragraph_ids(chapters)
+        for chapter in chapters
     ]
+    replace_project_chapters(db, project_id, chapters)
     update_project_stage(project_id, ProjectStage.chapters_pending)
+    update_project_stage_in_db(db, project_id, ProjectStage.chapters_pending)
     return {
         "file_id": STORE.next_id("file"),
         "project_id": project_id,
