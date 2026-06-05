@@ -52,16 +52,16 @@ type AppProps = {
   initialYaml?: string;
 };
 
-const initialProject = createDemoProject();
-
 function updateProject(project: ProjectSummary, patch: Partial<ProjectSummary>): ProjectSummary {
   return { ...project, ...patch, updated_at: nowIso() };
 }
 
 export default function App({ initialYaml }: AppProps) {
+  const initialYamlProject = useMemo(() => (initialYaml ? createDemoProject() : null), [initialYaml]);
+  const initialProjects = initialYamlProject ? [initialYamlProject] : [];
   const [mode, setMode] = useState<UiMode>("demo");
-  const [projects, setProjects] = useState<ProjectSummary[]>([initialProject]);
-  const [activeProjectId, setActiveProjectId] = useState(initialProject.project_id);
+  const [projects, setProjects] = useState<ProjectSummary[]>(initialProjects);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(initialYamlProject?.project_id ?? null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [viewMode, setViewMode] = useState<WorkspaceView>(initialYaml ? "script" : "conversation");
   const [chapters, setChapters] = useState<ChapterDraft[]>([]);
@@ -91,12 +91,13 @@ export default function App({ initialYaml }: AppProps) {
   const [failedStage, setFailedStage] = useState<string | null>(null);
   const [latestExport, setLatestExport] = useState<ExportResult | null>(null);
   const [uploadedNovelName, setUploadedNovelName] = useState<string | null>(null);
-  const [newProjectName, setNewProjectName] = useState("新项目");
+  const [newProjectName, setNewProjectName] = useState("");
 
   const activeProject = useMemo(
-    () => projects.find((project) => project.project_id === activeProjectId) ?? projects[0],
+    () => (activeProjectId ? projects.find((project) => project.project_id === activeProjectId) ?? null : null),
     [activeProjectId, projects]
   );
+  const canCreateProject = newProjectName.trim().length > 0;
 
   const setActiveProjectPatch = useCallback(
     (patch: Partial<ProjectSummary>) => {
@@ -120,6 +121,8 @@ export default function App({ initialYaml }: AppProps) {
           setStatusMessage("已连接后端服务。");
         } else {
           setMode("live");
+          setProjects([]);
+          setActiveProjectId(null);
           setStatusMessage("后端已连接。可以新建项目开始。");
         }
       })
@@ -204,20 +207,22 @@ export default function App({ initialYaml }: AppProps) {
 
   function handleNewProject() {
     const trimmedName = newProjectName.trim();
-    const name = trimmedName && trimmedName !== "新项目" ? trimmedName : `新项目 ${projects.length + 1}`;
+    if (!trimmedName) return;
     void runAction("正在新建项目", async () => {
       if (mode === "live") {
         try {
-          const project = await createProject(name);
+          const project = await createProject(trimmedName);
           setProjects((items) => [project, ...items]);
           setActiveProjectId(project.project_id);
           resetArtifactsForProject();
+          setNewProjectName("");
           return;
         } catch {
           setMode("demo");
         }
       }
-      createLocalProject(name);
+      createLocalProject(trimmedName);
+      setNewProjectName("");
     });
   }
 
@@ -406,43 +411,34 @@ export default function App({ initialYaml }: AppProps) {
     });
   }
 
-  const hasNovelUpload = chapters.length > 0 || Boolean(uploadedNovelName);
+  const hasNovelUpload = Boolean(activeProject) && (chapters.length > 0 || Boolean(uploadedNovelName));
   const statusText = useMemo(() => {
+    if (!activeProject) return "暂无项目";
     if (!hasNovelUpload) return "正在等待用户上传";
     if (!scenePlan) return "正在等待生成场景";
     if (!scenePlanConfirmed) return "正在等待用户确认 Scene Plan";
     if (!scriptPreview) return "正在等待生成剧本";
     return "剧本已生成";
-  }, [hasNovelUpload, scenePlan, scenePlanConfirmed, scriptPreview]);
-
-  if (!activeProject) {
-    return (
-      <div className="workspace">
-        <div className="empty-start">
-          <h1>NovelScript AI</h1>
-          <p>请新建项目开始。</p>
-        </div>
-      </div>
-    );
-  }
+  }, [activeProject, hasNovelUpload, scenePlan, scenePlanConfirmed, scriptPreview]);
 
   return (
     <div className="figma-workspace">
       <header className="topbar">
         <div className="brand-block">
           <div className="product-name">NovelScript AI</div>
-          <div className="project-name">当前项目：{activeProject.name}</div>
+          {activeProject ? <div className="project-name">当前项目：{activeProject.name}</div> : null}
         </div>
         <div className="topbar-actions">
           <label className="new-project-control">
             <span>项目名</span>
             <input
               aria-label="新项目名称"
+              placeholder="输入项目名"
               value={newProjectName}
               onChange={(event) => setNewProjectName(event.target.value)}
             />
           </label>
-          <button className="primary-button" disabled={loading} type="button" onClick={handleNewProject}>
+          <button className="primary-button" disabled={loading || !canCreateProject} type="button" onClick={handleNewProject}>
             新建项目
           </button>
           <ExportMenu disabled={!scriptPreview} latestExport={latestExport} loading={loading} onExport={handleExport} />
@@ -455,6 +451,7 @@ export default function App({ initialYaml }: AppProps) {
           currentProject={activeProject}
           error={error}
           loading={loading}
+          canCreateProject={canCreateProject}
           mode={mode}
           newProjectName={newProjectName}
           projects={projects}
@@ -470,33 +467,44 @@ export default function App({ initialYaml }: AppProps) {
           onSelectView={setViewMode}
           onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
         />
-        <ConversationPane
-          activeLabel={loadingLabel}
-          chapters={chapters}
-          chaptersConfirmed={chaptersConfirmed}
-          error={error}
-          hasNovelUpload={hasNovelUpload}
-          loading={loading}
-          messages={messages}
-          mode={mode}
-          progress={progress}
-          projectName={activeProject.name}
-          selectedStyle={styleSourceValue}
-          statusMessage={statusMessage}
-          styleLocked={styleLocked}
-          uploadedNovelName={uploadedNovelName}
-          onConfirmChapters={handleConfirmChapters}
-          onNovelSelected={handleNovelSelected}
-          onStyleChange={handleStyleSourceChange}
-          onStyleReferenceSelected={handleStyleReferenceSelected}
-          onSubmitMessage={handleSubmitMessage}
-        />
+        {activeProject ? (
+          <ConversationPane
+            activeLabel={loadingLabel}
+            chapters={chapters}
+            chaptersConfirmed={chaptersConfirmed}
+            error={error}
+            hasNovelUpload={hasNovelUpload}
+            loading={loading}
+            messages={messages}
+            mode={mode}
+            progress={progress}
+            projectName={activeProject.name}
+            selectedStyle={styleSourceValue}
+            statusMessage={statusMessage}
+            styleLocked={styleLocked}
+            uploadedNovelName={uploadedNovelName}
+            onConfirmChapters={handleConfirmChapters}
+            onNovelSelected={handleNovelSelected}
+            onStyleChange={handleStyleSourceChange}
+            onStyleReferenceSelected={handleStyleReferenceSelected}
+            onSubmitMessage={handleSubmitMessage}
+          />
+        ) : (
+          <main className="figma-conversation" aria-label="对话区">
+            <div className="figma-conversation-body figma-empty-workspace-body">
+              <section className="figma-empty-prompt">
+                <h2>暂无项目</h2>
+                <p>请先新建项目，然后上传小说并完成风格设计。</p>
+              </section>
+            </div>
+          </main>
+        )}
         <ResultPane
           failedStage={failedStage}
           fallbackEvidence={fallbackEvidence}
           latestExport={latestExport}
           loading={loading}
-          projectId={activeProject.project_id}
+          projectId={activeProject?.project_id ?? ""}
           scenePlan={scenePlan}
           scenePlanConfirmed={scenePlanConfirmed}
           scriptForUi={scriptForUi}

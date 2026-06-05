@@ -5,9 +5,10 @@ type ViewMode = "conversation" | "scene-plan" | "script";
 type Props = {
   collapsed: boolean;
   projects: ProjectSummary[];
-  currentProject: ProjectSummary;
+  currentProject: ProjectSummary | null;
   error: string | null;
   loading: boolean;
+  canCreateProject: boolean;
   mode: UiMode;
   newProjectName: string;
   scenePlan: ScenePlan | null;
@@ -22,6 +23,7 @@ type Props = {
 
 function LegacyProjectSidebar({
   collapsed,
+  canCreateProject,
   currentProject,
   projects,
   scenePlan,
@@ -42,12 +44,12 @@ function LegacyProjectSidebar({
             新建项目
           </button>
           <div className="section-label">项目</div>
-          <div className="current-project-name">{currentProject.name}</div>
+          {currentProject ? <div className="current-project-name">{currentProject.name}</div> : null}
           <div className="project-list">
             {projects.map((project) => (
               <button
                 key={project.project_id}
-                className={project.project_id === currentProject.project_id ? "nav-item active" : "nav-item"}
+                className={project.project_id === currentProject?.project_id ? "nav-item active" : "nav-item"}
                 type="button"
                 onClick={() => onSelectProject(project.project_id)}
               >
@@ -93,6 +95,7 @@ function LegacyProjectSidebar({
 
 export function ProjectSidebar({
   collapsed,
+  canCreateProject,
   currentProject,
   error,
   loading,
@@ -129,11 +132,12 @@ export function ProjectSidebar({
               <span>项目名</span>
               <input
                 aria-label="新项目名称"
+                placeholder="输入项目名"
                 value={newProjectName}
                 onChange={(event) => onNewProjectNameChange(event.target.value)}
               />
             </label>
-            <button className="figma-primary full" disabled={loading} type="button" onClick={onNewProject}>
+            <button className="figma-primary full" disabled={loading || !canCreateProject} type="button" onClick={onNewProject}>
               新建项目
             </button>
           </section>
@@ -147,20 +151,21 @@ export function ProjectSidebar({
 
           <section className="figma-sidebar-section">
             <div className="figma-section-label">项目</div>
-            <button className="figma-current-project" type="button" onClick={() => onSelectProject(currentProject.project_id)}>
-              <span>{currentProject.name}</span>
-            </button>
             <div className="figma-project-list">
-              {projects.map((project) => (
-                <button
-                  key={project.project_id}
-                  className={project.project_id === currentProject.project_id ? "figma-nav-item active" : "figma-nav-item"}
-                  type="button"
-                  onClick={() => onSelectProject(project.project_id)}
-                >
-                  <span>{project.name}</span>
-                </button>
-              ))}
+              {projects.length > 0 ? (
+                projects.map((project) => (
+                  <button
+                    key={project.project_id}
+                    className={project.project_id === currentProject?.project_id ? "figma-nav-item active" : "figma-nav-item"}
+                    type="button"
+                    onClick={() => onSelectProject(project.project_id)}
+                  >
+                    <span>{project.name}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="figma-empty-project-list">暂无项目</div>
+              )}
             </div>
           </section>
 
