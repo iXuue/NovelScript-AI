@@ -129,7 +129,7 @@ export function ProjectSidebar({
         {!collapsed ? (
           <div>
             <div className="figma-brand-title">NovelScript AI</div>
-            <div className="figma-brand-subtitle">小说转剧本工作台</div>
+            <div className="figma-brand-subtitle">工作台 MVP（中文版）</div>
           </div>
         ) : null}
         <button className="figma-icon-button" type="button" onClick={onToggleCollapsed}>

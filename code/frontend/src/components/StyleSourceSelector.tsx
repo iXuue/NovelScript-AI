@@ -98,7 +98,7 @@ export function StyleSourceSelector({ locked, loading, selected, onChange, onRef
       <div className="figma-style-header">
         <div>
           <div className="figma-section-label">风格来源</div>
-          <h2>选择生成风格</h2>
+          <h2>初始风格选择</h2>
         </div>
         {locked ? <span className="figma-lock-badge">已锁定</span> : null}
       </div>

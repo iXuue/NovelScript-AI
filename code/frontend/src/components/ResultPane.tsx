@@ -125,7 +125,7 @@ function LegacyResultPane({
 function getPanelTitle(viewMode: Props["viewMode"]) {
   if (viewMode === "scene-plan") return "Scene Plan";
   if (viewMode === "script") return "剧本预览";
-  return "成果区";
+  return "预览";
 }
 
 export function ResultPane({
@@ -228,7 +228,7 @@ export function ResultPane({
           <section className="figma-result-empty" aria-label="成果空状态">
             <div className="figma-empty-mark" aria-hidden="true" />
             <h3>{statusText}</h3>
-            <p>右侧会显示 Scene Plan、剧本 YAML 和来源证据。</p>
+            <p>等待小说上传或生成完成后，这里会显示预览、剧本 YAML 和来源证据。</p>
             {viewMode === "scene-plan" ? (
               <button className="figma-primary" disabled={loading} type="button" onClick={onGenerateScenePlan}>
                 {loading ? "生成中" : "生成 Scene Plan"}
