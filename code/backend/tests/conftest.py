@@ -35,6 +35,12 @@ class FakeAnalysisLLMProvider(LLMProvider):
                 '"related_characters":["她"],"related_locations":[],"related_plot_points":["归来"],'
                 '"importance":5,"must_keep":true}]}'
             ) % (paragraph_id, quote)
+        elif request.task_type == "style_profile":
+            text = (
+                "采用悬疑短剧风格。对白短促克制，多用潜台词。"
+                "场景短小精悍，切换频繁，通过硬切和悬念转场保持快节奏。"
+                "冲突通过持续施压和信息差推进。旁白极少，动作描写服务于紧张氛围。"
+            )
         else:
             text = "{}"
         return LLMResponse(text=text, model_name="fake-analysis", usage=LLMUsage(input_tokens=1, output_tokens=1))
@@ -83,4 +89,3 @@ def test_db():
     Base.metadata.create_all(engine)
     with Session(engine) as session:
         yield session
-
