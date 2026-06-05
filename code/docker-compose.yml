@@ -9,12 +9,17 @@ services:
       - "5432:5432"
     volumes:
       - novelscript_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novelscript -d novelscript"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build:
       context: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://novelscript:novelscript@postgres:5432/novelscript
+      DATABASE_URL: "postgresql+psycopg://novelscript:novelscript@postgres:5432/novelscript"
       STORAGE_ROOT: /app/storage
       LOCAL_DEVELOPER_LOGS_ENABLED: "true"
     ports:
@@ -22,18 +27,44 @@ services:
     volumes:
       - ./storage:/app/storage
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
       context: ./frontend
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      VITE_API_BASE_URL: "http://localhost:8000"
     ports:
       - "5173:5173"
     depends_on:
       - backend
 
+  backend-test:
+    profiles: ["test"]
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: "sqlite+pysqlite:///:memory:"
+      STORAGE_ROOT: /app/storage
+      LOCAL_DEVELOPER_LOGS_ENABLED: "false"
+    command: ["pytest", "tests", "-q"]
+
+  frontend-test:
+    profiles: ["test"]
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE_URL: "http://backend:8000"
+    command: ["npm", "test"]
+
+  frontend-build:
+    profiles: ["test"]
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE_URL: "http://backend:8000"
+    command: ["npm", "run", "build"]
+
 volumes:
   novelscript_postgres_data:
-

@@ -456,6 +456,10 @@ export default function App({ initialYaml }: AppProps) {
           scenePlan={scenePlan}
           viewMode={viewMode}
           onNewProject={handleNewProject}
+          onSelectProject={(projectId) => {
+            setActiveProjectId(projectId);
+            resetArtifactsForProject();
+          }}
           onSelectView={setViewMode}
           onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
         />
@@ -494,4 +498,3 @@ export default function App({ initialYaml }: AppProps) {
     </div>
   );
 }
-

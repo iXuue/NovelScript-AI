@@ -10,6 +10,7 @@ type Props = {
   viewMode: ViewMode;
   onToggleCollapsed: () => void;
   onSelectView: (view: ViewMode) => void;
+  onSelectProject: (projectId: string) => void;
   onNewProject: () => void;
 };
 
@@ -20,6 +21,7 @@ export function ProjectSidebar({
   scenePlan,
   viewMode,
   onNewProject,
+  onSelectProject,
   onSelectView,
   onToggleCollapsed
 }: Props) {
@@ -41,6 +43,7 @@ export function ProjectSidebar({
                 key={project.project_id}
                 className={project.project_id === currentProject.project_id ? "nav-item active" : "nav-item"}
                 type="button"
+                onClick={() => onSelectProject(project.project_id)}
               >
                 {project.name}
               </button>

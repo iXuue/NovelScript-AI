@@ -27,7 +27,7 @@ export function AgentProgress({ progress, activeLabel }: Props) {
   return (
     <section className="agent-progress">
       <button className="collapse-button" type="button" onClick={() => setOpen((value) => !value)}>
-        <span aria-hidden="true">{open ? "v" : ">"}</span>
+        <span className={open ? "disclosure-icon open" : "disclosure-icon"} aria-hidden="true" />
         Agent 执行进度
         {activeLabel ? <span className="active-step">{activeLabel}</span> : null}
       </button>

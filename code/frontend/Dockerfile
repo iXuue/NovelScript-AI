@@ -1,8 +1,8 @@
-FROM node:20-slim
+FROM node:20-slim AS app
 
 WORKDIR /app
-COPY package.json /app/package.json
-RUN npm install
+COPY package.json package-lock.json /app/
+RUN npm ci
 COPY . /app
-CMD ["npm", "run", "dev"]
 
+CMD ["npm", "run", "dev"]

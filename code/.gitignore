@@ -8,4 +8,4 @@ storage/
 developer_runs/
 .env
 .env.*
-
+*.log

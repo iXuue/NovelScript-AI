@@ -15,14 +15,44 @@
 
 ## 验证
 
-后端：
+本项目约定测试优先在 Docker Compose 中执行。
+
+Docker 后端测试：
+
+```powershell
+cd E:\七牛云\code
+docker compose --profile test run --rm backend-test
+```
+
+Docker 前端测试：
+
+```powershell
+cd E:\七牛云\code
+docker compose --profile test run --rm frontend-test
+```
+
+Docker 前端构建：
+
+```powershell
+cd E:\七牛云\code
+docker compose --profile test run --rm frontend-build
+```
+
+启动完整本地环境：
+
+```powershell
+cd E:\七牛云\code
+docker compose up --build
+```
+
+后端本机调试：
 
 ```powershell
 cd E:\七牛云\code\backend
 pytest tests -q
 ```
 
-前端依赖安装后：
+前端本机调试：
 
 ```powershell
 cd E:\七牛云\code\frontend
@@ -30,4 +60,3 @@ npm install
 npm test
 npm run build
 ```
-

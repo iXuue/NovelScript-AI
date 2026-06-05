@@ -101,7 +101,7 @@ export function ResultPane({
           ) : null}
           {viewMode === "script" ? (
             <button className="primary-button" disabled={loading || !scenePlanConfirmed} type="button" onClick={onGenerateScript}>
-              {loading ? "生成中" : "生成剧本"}
+              {loading ? "生成中" : "开始生成剧本"}
             </button>
           ) : null}
         </section>
