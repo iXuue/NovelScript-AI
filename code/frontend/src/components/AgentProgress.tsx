@@ -52,7 +52,7 @@ export function AgentProgress({ progress, activeLabel }: Props) {
     <section className="figma-agent-progress">
       <button className="figma-progress-trigger" type="button" onClick={() => setOpen((value) => !value)}>
         <span className={open ? "figma-chevron open" : "figma-chevron"} aria-hidden="true" />
-        <span>Agent 执行进度</span>
+        <span>正在执行...</span>
         {activeLabel ? <small>{activeLabel}</small> : <small>{completed}/{total}</small>}
       </button>
       {open ? (

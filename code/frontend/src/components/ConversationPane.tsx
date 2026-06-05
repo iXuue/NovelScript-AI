@@ -128,6 +128,8 @@ export function ConversationPane({
   const [draft, setDraft] = useState("");
   const needsSetup = !hasNovelUpload || !selectedStyle;
   const statusText = error ?? statusMessage ?? (mode === "demo" ? "演示模式" : "后端已连接");
+  const showAgentProgress =
+    Boolean(activeLabel) || progress?.status === "queued" || progress?.status === "running";
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -191,7 +193,7 @@ export function ConversationPane({
           ))}
         </section>
 
-        <AgentProgress activeLabel={activeLabel} progress={progress} />
+        {showAgentProgress ? <AgentProgress activeLabel={activeLabel} progress={progress} /> : null}
       </div>
 
       <form className="figma-composer" onSubmit={handleSubmit}>
