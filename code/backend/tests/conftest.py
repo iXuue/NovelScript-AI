@@ -62,6 +62,15 @@ class FakeAnalysisLLMProvider(LLMProvider):
                 '"scene_function":"建立人物回归","core_conflict":"她是否进入旧宅",'
                 '"adaptation_note":"保留雨夜视觉元素"}]}'
             )
+        elif request.task_type == "script_generation":
+            text = (
+                '{"scene_id":"S001","title":"雨夜归来","content_blocks":['
+                '{"content_block_id":"CB001","type":"action","text":"她站在旧宅门口。",'
+                '"speaker":null,"source_evidence_ids":["EV001"]},'
+                '{"content_block_id":"CB002","type":"narration","text":"雨声压住她的呼吸。",'
+                '"speaker":null,"source_evidence_ids":["EV001"]}'
+                ']}'
+            )
         else:
             text = "{}"
         return LLMResponse(text=text, model_name="fake-analysis", usage=LLMUsage(input_tokens=1, output_tokens=1))

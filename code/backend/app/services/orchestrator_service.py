@@ -9,6 +9,7 @@ from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage
 from app.services.run_service import create_project_run
 from app.services.scene_plan_service import confirm_current_scene_plan, generate_scene_plan_artifact
+from app.services.script_service import generate_script_from_confirmed_scene_plan
 from app.services.store import STORE, now_utc
 from app.services.story_bible_service import generate_story_bible
 from app.services.style_profile_service import generate_style_profile
@@ -111,7 +112,17 @@ def confirm_scene_plan(project_id: str, confirmation_source: str, message_id: st
     }
 
 
-def generate_script(project_id: str) -> dict:
+def generate_script(project_id: str, db=None, llm_provider: LLMProvider | None = None) -> dict:
+    if db is not None:
+        run = create_project_run(
+            project_id,
+            trigger_type="script_generation",
+            stage="script_generating",
+            steps=["script_generation", "validation"],
+        )
+        result = generate_script_from_confirmed_scene_plan(db, project_id, llm_provider)
+        result["run_id"] = run["run_id"]
+        return result
     scene_plan = STORE.scene_plans.get(project_id)
     if not scene_plan or not scene_plan.get("confirmed"):
         raise PermissionError("scene_plan_not_confirmed")
