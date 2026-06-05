@@ -22,3 +22,6 @@ class Project(Base):
     checkpoints = relationship("Checkpoint", back_populates="project", cascade="all, delete-orphan")
     chapter_summaries = relationship("ChapterSummary", back_populates="project", cascade="all, delete-orphan")
     evidence_items = relationship("EvidenceItem", back_populates="project", cascade="all, delete-orphan")
+    style_source = relationship("StyleSourceRecord", back_populates="project", cascade="all, delete-orphan", uselist=False)
+    style_reference_files = relationship("StyleReferenceFile", back_populates="project", cascade="all, delete-orphan")
+    style_profiles = relationship("StyleProfile", back_populates="project", cascade="all, delete-orphan")
