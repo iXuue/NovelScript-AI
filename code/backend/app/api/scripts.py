@@ -1,18 +1,25 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 from app.api.errors import api_error
+from app.core.database import get_db
+from app.services.llm_provider import LLMProvider, get_llm_provider
 from app.services.orchestrator_service import generate_script
 from app.services.project_service import require_project
-from app.services.store import STORE
+from app.services.script_service import get_current_script_for_ui, get_current_yaml_preview
 
 router = APIRouter()
 
 
 @router.post("/projects/{project_id}/scripts/generate")
-def generate_script_endpoint(project_id: str):
+def generate_script_endpoint(
+    project_id: str,
+    db: Session = Depends(get_db),
+    llm_provider: LLMProvider = Depends(get_llm_provider),
+):
     try:
         require_project(project_id)
-        return generate_script(project_id)
+        return generate_script(project_id, db, llm_provider)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
     except PermissionError:
@@ -20,24 +27,24 @@ def generate_script_endpoint(project_id: str):
 
 
 @router.get("/projects/{project_id}/scripts/current")
-def get_current_script_endpoint(project_id: str):
+def get_current_script_endpoint(project_id: str, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
-    script = STORE.script_ui.get(project_id)
+    script = get_current_script_for_ui(db, project_id)
     if script is None:
         raise api_error(404, "script_not_found", "Script not found")
     return script
 
 
 @router.get("/projects/{project_id}/scripts/current/yaml-preview")
-def get_yaml_preview_endpoint(project_id: str):
+def get_yaml_preview_endpoint(project_id: str, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
-    preview = STORE.yaml_previews.get(project_id)
+    preview = get_current_yaml_preview(db, project_id)
     if preview is None:
         raise api_error(404, "script_not_found", "Script not found")
     return preview
