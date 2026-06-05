@@ -112,11 +112,8 @@ export function ConversationPane({
   hasNovelUpload,
   loading,
   messages,
-  mode,
   progress,
-  projectName,
   selectedStyle,
-  statusMessage,
   styleLocked,
   uploadedNovelName,
   onConfirmChapters,
@@ -148,18 +145,14 @@ export function ConversationPane({
 
   return (
     <main className="figma-conversation" aria-label="对话区">
-      <header className="figma-panel-header">
-        <div>
-          <div className="figma-section-label">当前项目</div>
-          <h1>{projectName}</h1>
-        </div>
-        {error ? (
+      {error ? (
+        <header className="figma-panel-header figma-panel-header-error">
           <div className="figma-connection error">
             <span className="figma-status-dot" aria-hidden="true" />
             <span>{error}</span>
           </div>
-        ) : null}
-      </header>
+        </header>
+      ) : null}
 
       <StyleSourceSelector
         locked={styleLocked}
@@ -198,25 +191,27 @@ export function ConversationPane({
       </div>
 
       <form className="figma-composer" onSubmit={handleSubmit}>
-        <textarea
-          aria-label="对话输入"
-          disabled={loading}
-          placeholder="输入要求，例如：把第一场对白改得更短"
-          rows={4}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-        <div className="figma-composer-footer">
-          <div className="figma-composer-tools">
-            <label className="figma-attachment-icon" title="上传小说附件">
-              <span aria-hidden="true">🔗</span>
-              <input aria-label="上传小说附件" disabled={loading} type="file" accept=".md,.txt,.docx,.pdf" onChange={handleFileChange} />
-            </label>
-            {uploadedNovelName ? <span className="figma-uploaded-name">{uploadedNovelName}</span> : null}
+        <div className="figma-composer-field">
+          <textarea
+            aria-label="对话输入"
+            disabled={loading}
+            placeholder="输入要求，例如：把第一场对白改得更短"
+            rows={4}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+          <div className="figma-composer-actions">
+            <div className="figma-composer-tools">
+              <label className="figma-attachment-icon" title="上传小说附件">
+                <span aria-hidden="true">🔗</span>
+                <input aria-label="上传小说附件" disabled={loading} type="file" accept=".md,.txt,.docx,.pdf" onChange={handleFileChange} />
+              </label>
+              {uploadedNovelName ? <span className="figma-uploaded-name">{uploadedNovelName}</span> : null}
+            </div>
+            <button className="figma-primary" type="submit" disabled={loading || needsSetup}>
+              {loading ? "处理中" : "发送"}
+            </button>
           </div>
-          <button className="figma-primary" type="submit" disabled={loading || needsSetup}>
-            {loading ? "处理中" : "发送"}
-          </button>
         </div>
       </form>
     </main>

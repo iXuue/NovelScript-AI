@@ -4100,3 +4100,94 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Result title and fixed composer layout. */
+.figma-panel-header-error {
+  justify-content: flex-end;
+  min-height: 48px;
+}
+
+.figma-result-header {
+  align-items: center;
+}
+
+.figma-result-header h2 {
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.figma-composer {
+  display: block;
+  min-height: auto;
+  padding: 14px 16px 16px;
+}
+
+.figma-composer-field {
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(96, 157, 183, 0.24);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58), 0 8px 18px rgba(113, 154, 180, 0.1);
+  height: 156px;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.figma-composer .figma-composer-field textarea {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 13px 14px 60px;
+  resize: none;
+  scrollbar-gutter: stable;
+}
+
+.figma-composer-actions {
+  align-items: center;
+  bottom: 10px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  left: 10px;
+  min-width: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+}
+
+.figma-composer-actions > * {
+  pointer-events: auto;
+}
+
+.figma-composer-actions .figma-primary {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 18px;
+}
+
+.figma-composer-actions .figma-attachment-icon {
+  height: 38px;
+  width: 38px;
+}
+
+@media (max-width: 920px) {
+  .figma-composer {
+    padding: 12px;
+  }
+
+  .figma-composer-field {
+    height: 152px;
+  }
+
+  .figma-composer-actions {
+    flex-direction: row;
+  }
+
+  .figma-composer-actions .figma-primary {
+    width: auto;
+  }
+}

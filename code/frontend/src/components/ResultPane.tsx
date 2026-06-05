@@ -122,12 +122,6 @@ function LegacyResultPane({
   );
 }
 
-function getPanelTitle(viewMode: Props["viewMode"]) {
-  if (viewMode === "scene-plan") return "Scene Plan";
-  if (viewMode === "script") return "剧本预览";
-  return "预览";
-}
-
 export function ResultPane({
   failedStage,
   fallbackEvidence,
@@ -151,8 +145,7 @@ export function ResultPane({
     <aside className="figma-result-panel" aria-label="成果区">
       <header className="figma-result-header">
         <div>
-          <div className="figma-section-label">输出</div>
-          <h2>{getPanelTitle(viewMode)}</h2>
+          <h2>剧本预览</h2>
         </div>
         <ExportMenu disabled={!yaml} latestExport={latestExport} loading={loading} onExport={onExport} />
       </header>
