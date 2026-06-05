@@ -49,4 +49,6 @@ def confirm_scene_plan_endpoint(project_id: str, payload: ConfirmScenePlanReques
         return confirm_scene_plan(project_id, payload.confirmation_source, payload.message_id, db)
     except KeyError:
         raise api_error(404, "scene_plan_not_found", "Scene Plan not found")
+    except PermissionError:
+        raise api_error(409, "scene_plan_validation_failed", "Scene Plan validation must pass before confirmation")
 

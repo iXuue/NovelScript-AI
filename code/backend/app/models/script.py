@@ -10,6 +10,7 @@ from app.core.database import Base
 
 
 json_list_type = MutableList.as_mutable(JSON().with_variant(JSONB, "postgresql"))
+json_value_type = JSON().with_variant(JSONB, "postgresql")
 
 
 class ScriptVersion(Base):
@@ -27,6 +28,7 @@ class ScriptVersion(Base):
     project = relationship("Project", back_populates="script_versions")
     scenes = relationship("ScriptScene", back_populates="script_version", cascade="all, delete-orphan")
     content_blocks = relationship("ScriptContentBlock", back_populates="script_version", cascade="all, delete-orphan")
+    scene_validations = relationship("ScriptSceneValidation", back_populates="script_version", cascade="all, delete-orphan")
 
 
 class ScriptScene(Base):
@@ -68,3 +70,22 @@ class ScriptContentBlock(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     script_version = relationship("ScriptVersion", back_populates="content_blocks")
+
+
+class ScriptSceneValidation(Base):
+    __tablename__ = "script_scene_validations"
+    __table_args__ = (UniqueConstraint("script_version_id", "scene_id", name="uq_script_scene_validations_version_scene_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    script_version_id: Mapped[str] = mapped_column(ForeignKey("script_versions.script_version_id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False)
+    scene_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    issues: Mapped[list] = mapped_column(json_list_type, nullable=False, default=list)
+    suggestions: Mapped[list] = mapped_column(json_list_type, nullable=False, default=list)
+    coverage: Mapped[dict] = mapped_column(json_value_type, nullable=False, default=dict)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    script_version = relationship("ScriptVersion", back_populates="scene_validations")

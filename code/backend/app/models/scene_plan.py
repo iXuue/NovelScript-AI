@@ -10,6 +10,7 @@ from app.core.database import Base
 
 
 json_list_type = MutableList.as_mutable(JSON().with_variant(JSONB, "postgresql"))
+json_value_type = JSON().with_variant(JSONB, "postgresql")
 
 
 class ScenePlan(Base):
@@ -26,6 +27,7 @@ class ScenePlan(Base):
 
     project = relationship("Project", back_populates="scene_plans")
     scenes = relationship("ScenePlanScene", back_populates="scene_plan", cascade="all, delete-orphan")
+    validations = relationship("ScenePlanValidation", back_populates="scene_plan", cascade="all, delete-orphan")
 
 
 class ScenePlanScene(Base):
@@ -55,3 +57,21 @@ class ScenePlanScene(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     scene_plan = relationship("ScenePlan", back_populates="scenes")
+
+
+class ScenePlanValidation(Base):
+    __tablename__ = "scene_plan_validations"
+    __table_args__ = (UniqueConstraint("scene_plan_id", name="uq_scene_plan_validations_scene_plan_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scene_plan_id: Mapped[str] = mapped_column(ForeignKey("scene_plans.scene_plan_id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False)
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    issues: Mapped[list] = mapped_column(json_list_type, nullable=False, default=list)
+    suggestions: Mapped[list] = mapped_column(json_list_type, nullable=False, default=list)
+    coverage: Mapped[dict] = mapped_column(json_value_type, nullable=False, default=dict)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    scene_plan = relationship("ScenePlan", back_populates="validations")
