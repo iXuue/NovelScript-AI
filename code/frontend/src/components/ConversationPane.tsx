@@ -99,7 +99,7 @@ export function ConversationPane({
       <div className="figma-conversation-body">
         {showSetupHint ? (
           <section className="figma-empty-prompt">
-            <h2>上传小说并完成风格设置</h2>
+            <h2>请上传小说并完成风格设计</h2>
             <p>完成章节确认和风格选择后，就可以开始生成 Scene Plan。</p>
             {showGenerateAction ? (
               <button className="figma-primary figma-generate-cta" disabled={loading} type="button" onClick={handleGenerate}>
