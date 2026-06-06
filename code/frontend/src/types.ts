@@ -14,12 +14,24 @@ export type ProjectStage =
 
 export type ProjectSummary = {
   project_id: string;
+  user_id?: string | null;
   name: string;
   stage: ProjectStage;
   primary_conversation_id: string;
   active_session_id: string;
   created_at: string;
   updated_at: string;
+};
+
+export type AuthUser = {
+  user_id: string;
+  login_id: string;
+  created_at: string;
+};
+
+export type AuthSession = {
+  token: string;
+  user: AuthUser;
 };
 
 export type ChapterDraft = {

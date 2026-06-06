@@ -6,8 +6,10 @@ from app.models.script import ScriptContentBlock, ScriptScene, ScriptSceneValida
 from app.models.scene_plan import ScenePlan, ScenePlanScene, ScenePlanValidation
 from app.models.story import StoryBible
 from app.models.style import StyleProfile, StyleReferenceFile, StyleSourceRecord
+from app.models.user import AuthSession, User
 
 __all__ = [
+    "AuthSession",
     "Chapter",
     "ChapterSummary",
     "Checkpoint",
@@ -25,4 +27,5 @@ __all__ = [
     "StyleProfile",
     "StyleReferenceFile",
     "StyleSourceRecord",
+    "User",
 ]

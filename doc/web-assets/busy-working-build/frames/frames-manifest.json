@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "chroma_key": {
+    "hex": "#0000FF",
+    "rgb": [
+      0,
+      0,
+      255
+    ],
+    "threshold": 96.0
+  },
+  "rows": [
+    {
+      "state": "running",
+      "frames": [
+        "E:\\Codex\\codex_pets\\coda\\web-assets\\busy-working-build\\frames\\running\\00.png",
+        "E:\\Codex\\codex_pets\\coda\\web-assets\\busy-working-build\\frames\\running\\01.png",
+        "E:\\Codex\\codex_pets\\coda\\web-assets\\busy-working-build\\frames\\running\\02.png",
+        "E:\\Codex\\codex_pets\\coda\\web-assets\\busy-working-build\\frames\\running\\03.png",
+        "E:\\Codex\\codex_pets\\coda\\web-assets\\busy-working-build\\frames\\running\\04.png",
+        "E:\\Codex\\codex_pets\\coda\\web-assets\\busy-working-build\\frames\\running\\05.png"
+      ],
+      "method": "components"
+    }
+  ]
+}

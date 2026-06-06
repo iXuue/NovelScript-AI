@@ -1,6 +1,7 @@
 from pydantic import TypeAdapter, ValidationError
 
-from app.domain.artifacts import ProjectStage
+from app.domain.artifacts import ArtifactStatus, ProjectStage
+from app.models.scene_plan import ScenePlan
 from app.domain.style import StyleSource
 from app.models.style import StyleReferenceFile, StyleSourceRecord
 from app.services.project_service import update_project_stage
@@ -9,6 +10,23 @@ from app.services.store import now_utc
 
 
 STYLE_ADAPTER = TypeAdapter(StyleSource)
+
+
+def is_style_locked(project_id: str, db=None) -> bool:
+    if project_id in STORE.style_locked:
+        return True
+    if db is None:
+        return False
+    confirmed_plan = (
+        db.query(ScenePlan)
+        .filter(
+            ScenePlan.project_id == project_id,
+            ScenePlan.status == ArtifactStatus.current,
+            ScenePlan.confirmed.is_(True),
+        )
+        .one_or_none()
+    )
+    return confirmed_plan is not None
 
 
 def validate_style_source(data: dict) -> StyleSource:
@@ -23,7 +41,7 @@ def validate_style_source(data: dict) -> StyleSource:
 
 
 def set_style_source(project_id: str, data: dict, db=None) -> dict:
-    if project_id in STORE.style_locked:
+    if is_style_locked(project_id, db):
         raise PermissionError("style_source_locked")
     source = validate_style_source(data)
     source_dict = source.model_dump()
@@ -53,7 +71,7 @@ def set_style_source(project_id: str, data: dict, db=None) -> dict:
     return {
         "project_id": project_id,
         "style_source": source_dict,
-        "style_locked": False,
+        "style_locked": is_style_locked(project_id, db),
         "stage": ProjectStage.style_selected,
     }
 
@@ -72,12 +90,12 @@ def get_style_source(project_id: str, db=None) -> dict:
     return {
         "project_id": project_id,
         "style_source": style_source,
-        "style_locked": project_id in STORE.style_locked,
+        "style_locked": is_style_locked(project_id, db),
     }
 
 
 def clear_style_source(project_id: str, db=None) -> None:
-    if project_id in STORE.style_locked:
+    if is_style_locked(project_id, db):
         raise PermissionError("style_source_locked")
     STORE.style_sources.pop(project_id, None)
     if db is not None:
@@ -88,7 +106,7 @@ def clear_style_source(project_id: str, db=None) -> None:
 
 
 def upload_style_reference(project_id: str, filename: str, markdown: str = "", db=None) -> dict:
-    if project_id in STORE.style_locked:
+    if is_style_locked(project_id, db):
         raise PermissionError("style_source_locked")
     file_id = STORE.next_id("file_style")
     payload = {

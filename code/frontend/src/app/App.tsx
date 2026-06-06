@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  ApiError,
   confirmChapters,
   confirmScenePlan,
   createExport,
@@ -8,17 +9,24 @@ import {
   generateScenePlan,
   generateScript,
   getActiveRun,
+  getCurrentUser,
   getCurrentScriptForUi,
+  getPendingChapters,
   getPrimaryMessages,
   getScenePlan,
   getStyleSource,
   getYamlPreview,
   listProjects,
+  loginUser,
+  modifyScript,
+  registerUser,
   sendMessage,
+  setAuthToken,
   setStyleSource,
   uploadNovel,
   uploadStyleReferenceScript
 } from "../api/client";
+import { AuthPane } from "../components/AuthPane";
 import { ConversationPane } from "../components/ConversationPane";
 import { ExportMenu } from "../components/ExportMenu";
 import { ProjectSidebar } from "../components/ProjectSidebar";
@@ -34,11 +42,14 @@ import {
 } from "../state/workspaceState";
 import type {
   AgentProgress,
+  AuthSession,
+  AuthUser,
   ChapterDraft,
   ConversationMessage,
   EvidenceLookupResult,
   ExportFormat,
   ExportResult,
+  ProjectStage,
   ProjectSummary,
   ScenePlan,
   ScriptCurrentForUi,
@@ -52,14 +63,66 @@ type AppProps = {
   initialYaml?: string;
 };
 
+const AUTH_TOKEN_STORAGE_KEY = "novelscript_auth_token";
+
+function readStoredAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
 function updateProject(project: ProjectSummary, patch: Partial<ProjectSummary>): ProjectSummary {
   return { ...project, ...patch, updated_at: nowIso() };
+}
+
+const HAS_UPLOAD_STAGES = new Set<ProjectStage>([
+  "chapters_pending",
+  "chapters_confirmed",
+  "style_selected",
+  "scene_plan_draft",
+  "scene_plan_confirmed",
+  "script_generating",
+  "script_ready",
+  "failed"
+]);
+
+const CHAPTER_CONFIRMED_STAGES = new Set<ProjectStage>([
+  "chapters_confirmed",
+  "style_selected",
+  "scene_plan_draft",
+  "scene_plan_confirmed",
+  "script_generating",
+  "script_ready"
+]);
+
+function isNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404;
+}
+
+function displayError(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.code ? `${err.message} (${err.code})` : err.message;
+  }
+  return err instanceof Error ? err.message : "操作失败";
+}
+
+async function optionalResource<T>(loader: () => Promise<T>): Promise<T | null> {
+  try {
+    return await loader();
+  } catch (err) {
+    if (isNotFound(err)) return null;
+    throw err;
+  }
 }
 
 export default function App({ initialYaml }: AppProps) {
   const initialYamlProject = useMemo(() => (initialYaml ? createDemoProject() : null), [initialYaml]);
   const initialProjects = initialYamlProject ? [initialYamlProject] : [];
   const [mode, setMode] = useState<UiMode>("demo");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authTokenValue, setAuthTokenValue] = useState<string | null>(() => readStoredAuthToken());
+  const [authChecking, setAuthChecking] = useState(!initialYaml);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>(initialProjects);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(initialYamlProject?.project_id ?? null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -110,6 +173,40 @@ export default function App({ initialYaml }: AppProps) {
   );
 
   useEffect(() => {
+    if (initialYaml) return;
+    if (!authTokenValue) {
+      setAuthToken(null);
+      setAuthChecking(false);
+      return;
+    }
+
+    let mounted = true;
+    setAuthToken(authTokenValue);
+    setAuthChecking(true);
+    getCurrentUser()
+      .then((user) => {
+        if (!mounted) return;
+        setAuthUser(user);
+        setAuthError(null);
+        setAuthChecking(false);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setAuthToken(null);
+        window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+        setAuthTokenValue(null);
+        setAuthUser(null);
+        setAuthError("登录已过期，请重新登录。");
+        setAuthChecking(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [authTokenValue, initialYaml]);
+
+  useEffect(() => {
+    if (initialYaml || !authUser) return;
     let mounted = true;
     listProjects()
       .then((items) => {
@@ -134,27 +231,18 @@ export default function App({ initialYaml }: AppProps) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authUser, initialYaml]);
 
   useEffect(() => {
     if (!activeProject || mode !== "live") return;
     let mounted = true;
-    getPrimaryMessages(activeProject.project_id)
-      .then((payload) => {
-        if (mounted) setMessages(payload.messages);
-      })
-      .catch(() => undefined);
-    getStyleSource(activeProject.project_id)
-      .then((payload) => {
-        if (!mounted) return;
-        setStyleSourceValue(payload.style_source);
-        setStyleLocked(payload.style_locked);
-      })
-      .catch(() => undefined);
+    loadProjectWorkspace(activeProject, () => mounted).catch((err) => {
+      if (mounted) setError(displayError(err));
+    });
     return () => {
       mounted = false;
     };
-  }, [activeProject, mode]);
+  }, [activeProjectId, mode]);
 
   useEffect(() => {
     if (!activeProject || mode !== "live") return;
@@ -183,6 +271,70 @@ export default function App({ initialYaml }: AppProps) {
     setError(null);
   }
 
+  function persistAuthSession(session: AuthSession) {
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, session.token);
+    setAuthToken(session.token);
+    setAuthUser(session.user);
+    setAuthError(null);
+    setStatusMessage("已登录。正在加载项目。");
+  }
+
+  function handleAuthSubmit(authMode: "login" | "register", loginId: string, password: string) {
+    setAuthLoading(true);
+    setAuthError(null);
+    void (authMode === "login" ? loginUser(loginId, password) : registerUser(loginId, password))
+      .then(persistAuthSession)
+      .catch((err) => setAuthError(displayError(err)))
+      .finally(() => setAuthLoading(false));
+  }
+
+  function handleLogout() {
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    setAuthToken(null);
+    setAuthTokenValue(null);
+    setAuthUser(null);
+    setMode("demo");
+    setProjects([]);
+    setActiveProjectId(null);
+    resetArtifactsForProject();
+    setStatusMessage("请登录后继续。");
+  }
+
+  async function loadProjectWorkspace(project: ProjectSummary, isCurrent: () => boolean = () => true) {
+    resetArtifactsForProject();
+    setChaptersConfirmed(CHAPTER_CONFIRMED_STAGES.has(project.stage));
+
+    const [messagePayload, stylePayload, pendingPayload, currentScenePlan, currentYaml, currentScriptUi] =
+      await Promise.all([
+        optionalResource(() => getPrimaryMessages(project.project_id)),
+        optionalResource(() => getStyleSource(project.project_id)),
+        optionalResource(() => getPendingChapters(project.project_id)),
+        optionalResource(() => getScenePlan(project.project_id)),
+        optionalResource(() => getYamlPreview(project.project_id)),
+        optionalResource(() => getCurrentScriptForUi(project.project_id))
+      ]);
+
+    if (!isCurrent()) return;
+
+    setMessages(messagePayload?.messages ?? []);
+    setStyleSourceValue(stylePayload?.style_source ?? null);
+    setStyleLocked(stylePayload?.style_locked ?? false);
+    setChapters(pendingPayload?.chapters ?? []);
+    setChaptersConfirmed(CHAPTER_CONFIRMED_STAGES.has(project.stage) || Boolean(currentScenePlan?.confirmed));
+    setScenePlan(currentScenePlan);
+    setScenePlanConfirmed(Boolean(currentScenePlan?.confirmed));
+    setScriptPreview(currentYaml);
+    setScriptForUi(currentScriptUi);
+
+    if (currentYaml) {
+      setViewMode("script");
+    } else if (currentScenePlan) {
+      setViewMode("scene-plan");
+    } else {
+      setViewMode("conversation");
+    }
+  }
+
   async function runAction(label: string, action: () => Promise<void>) {
     setLoading(true);
     setLoadingLabel(label);
@@ -190,7 +342,7 @@ export default function App({ initialYaml }: AppProps) {
     try {
       await action();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      setError(displayError(err));
     } finally {
       setLoading(false);
       setLoadingLabel(null);
@@ -210,16 +362,12 @@ export default function App({ initialYaml }: AppProps) {
     if (!trimmedName) return;
     void runAction("正在新建项目", async () => {
       if (mode === "live") {
-        try {
-          const project = await createProject(trimmedName);
-          setProjects((items) => [project, ...items]);
-          setActiveProjectId(project.project_id);
-          resetArtifactsForProject();
-          setNewProjectName("");
-          return;
-        } catch {
-          setMode("demo");
-        }
+        const project = await createProject(trimmedName);
+        setProjects((items) => [project, ...items]);
+        setActiveProjectId(project.project_id);
+        resetArtifactsForProject();
+        setNewProjectName("");
+        return;
       }
       createLocalProject(trimmedName);
       setNewProjectName("");
@@ -231,17 +379,16 @@ export default function App({ initialYaml }: AppProps) {
       setStyleSourceValue(source);
       return;
     }
-    setStyleSourceValue(source);
+    if (mode !== "live") {
+      setStyleSourceValue(source);
+    }
     void runAction("正在保存风格设计", async () => {
       if (mode === "live") {
-        try {
-          const response = await setStyleSource(activeProject.project_id, source);
-          setStyleSourceValue(response.style_source);
-          setActiveProjectPatch({ stage: response.stage });
-          return;
-        } catch {
-          setMode("demo");
-        }
+        const response = await setStyleSource(activeProject.project_id, source);
+        setStyleSourceValue(response.style_source);
+        setStyleLocked(response.style_locked);
+        setActiveProjectPatch({ stage: response.stage });
+        return;
       }
       setActiveProjectPatch({ stage: "style_selected" });
     });
@@ -251,16 +398,13 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject) return;
     void runAction("正在上传风格参考", async () => {
       if (mode === "live") {
-        try {
-          const uploaded = await uploadStyleReferenceScript(activeProject.project_id, file);
-          const source: StyleSource = { kind: "reference_scripts", reference_file_ids: [uploaded.file_id] };
-          const response = await setStyleSource(activeProject.project_id, source);
-          setStyleSourceValue(response.style_source);
-          setActiveProjectPatch({ stage: response.stage });
-          return;
-        } catch {
-          setMode("demo");
-        }
+        const uploaded = await uploadStyleReferenceScript(activeProject.project_id, file);
+        const source: StyleSource = { kind: "reference_scripts", reference_file_ids: [uploaded.file_id] };
+        const response = await setStyleSource(activeProject.project_id, source);
+        setStyleSourceValue(response.style_source);
+        setStyleLocked(response.style_locked);
+        setActiveProjectPatch({ stage: response.stage });
+        return;
       }
       const source: StyleSource = { kind: "reference_scripts", reference_file_ids: [`demo_${file.name}`] };
       setStyleSourceValue(source);
@@ -273,16 +417,12 @@ export default function App({ initialYaml }: AppProps) {
     setUploadedNovelName(file.name);
     void runAction("正在解析上传文件", async () => {
       if (mode === "live") {
-        try {
-          const response = await uploadNovel(activeProject.project_id, file);
-          setChapters(response.detected_chapters);
-          setChaptersConfirmed(false);
-          setActiveProjectPatch({ stage: response.stage });
-          setViewMode("conversation");
-          return;
-        } catch {
-          setMode("demo");
-        }
+        const response = await uploadNovel(activeProject.project_id, file);
+        setChapters(response.detected_chapters);
+        setChaptersConfirmed(false);
+        setActiveProjectPatch({ stage: response.stage });
+        setViewMode("conversation");
+        return;
       }
       const text = await file.text().catch(() => "");
       const detected = detectDemoChapters(text);
@@ -297,14 +437,10 @@ export default function App({ initialYaml }: AppProps) {
     void runAction("正在确认章节", async () => {
       const chapterIds = chapters.map((chapter) => chapter.chapter_id);
       if (mode === "live") {
-        try {
-          const response = await confirmChapters(activeProject.project_id, chapterIds);
-          setChaptersConfirmed(true);
-          setActiveProjectPatch({ stage: response.stage });
-          return;
-        } catch {
-          setMode("demo");
-        }
+        const response = await confirmChapters(activeProject.project_id, chapterIds);
+        setChaptersConfirmed(true);
+        setActiveProjectPatch({ stage: response.stage });
+        return;
       }
       setChaptersConfirmed(true);
       setActiveProjectPatch({ stage: "chapters_confirmed" });
@@ -315,17 +451,13 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject) return;
     void runAction("正在生成场景计划", async () => {
       if (mode === "live") {
-        try {
-          await generateScenePlan(activeProject.project_id);
-          const current = await getScenePlan(activeProject.project_id);
-          setScenePlan(current);
-          setScenePlanConfirmed(current.confirmed);
-          setActiveProjectPatch({ stage: "scene_plan_draft" });
-          setViewMode("scene-plan");
-          return;
-        } catch {
-          setMode("demo");
-        }
+        await generateScenePlan(activeProject.project_id);
+        const current = await getScenePlan(activeProject.project_id);
+        setScenePlan(current);
+        setScenePlanConfirmed(current.confirmed);
+        setActiveProjectPatch({ stage: "scene_plan_draft" });
+        setViewMode("scene-plan");
+        return;
       }
       const current = createDemoScenePlan(chapters);
       setScenePlan(current);
@@ -339,16 +471,12 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject || !scenePlan) return;
     void runAction("正在确认场景计划", async () => {
       if (mode === "live") {
-        try {
-          const response = await confirmScenePlan(activeProject.project_id, "button");
-          setStyleLocked(response.style_locked);
-          setScenePlan({ ...scenePlan, confirmed: true });
-          setScenePlanConfirmed(true);
-          setActiveProjectPatch({ stage: "scene_plan_confirmed" });
-          return;
-        } catch {
-          setMode("demo");
-        }
+        const response = await confirmScenePlan(activeProject.project_id, "button");
+        setStyleLocked(response.style_locked);
+        setScenePlan({ ...scenePlan, confirmed: true });
+        setScenePlanConfirmed(true);
+        setActiveProjectPatch({ stage: "scene_plan_confirmed" });
+        return;
       }
       setStyleLocked(true);
       setScenePlan({ ...scenePlan, confirmed: true });
@@ -361,18 +489,14 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject || !scenePlan) return;
     void runAction("正在逐场生成剧本", async () => {
       if (mode === "live") {
-        try {
-          await generateScript(activeProject.project_id);
-          const preview = await getYamlPreview(activeProject.project_id);
-          const ui = await getCurrentScriptForUi(activeProject.project_id);
-          setScriptPreview(preview);
-          setScriptForUi(ui);
-          setActiveProjectPatch({ stage: "script_ready" });
-          setViewMode("script");
-          return;
-        } catch {
-          setMode("demo");
-        }
+        await generateScript(activeProject.project_id);
+        const preview = await getYamlPreview(activeProject.project_id);
+        const ui = await getCurrentScriptForUi(activeProject.project_id);
+        setScriptPreview(preview);
+        setScriptForUi(ui);
+        setActiveProjectPatch({ stage: "script_ready" });
+        setViewMode("script");
+        return;
       }
       const generated = createDemoScript(activeProject.name, scenePlan);
       setScriptPreview(generated.preview);
@@ -387,20 +511,23 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject) return;
     const local = createLocalMessage(activeProject, content);
     setMessages((items) => [...items, local]);
-    void sendMessage(activeProject.project_id, content).catch(() => undefined);
+    if (mode !== "live") return;
+    void runAction("正在发送消息", async () => {
+      if (scriptPreview) {
+        await modifyScript(activeProject.project_id, content, { type: "script" });
+      } else {
+        await sendMessage(activeProject.project_id, content);
+      }
+    });
   }
 
   function handleExport(format: ExportFormat) {
     if (!activeProject || !scriptPreview) return;
     void runAction("正在导出", async () => {
       if (mode === "live") {
-        try {
-          const exported = await createExport(activeProject.project_id, format);
-          setLatestExport(exported);
-          return;
-        } catch {
-          setMode("demo");
-        }
+        const exported = await createExport(activeProject.project_id, format);
+        setLatestExport(exported);
+        return;
       }
       setLatestExport({
         export_id: `exp_demo_${Date.now()}`,
@@ -411,15 +538,25 @@ export default function App({ initialYaml }: AppProps) {
     });
   }
 
-  const hasNovelUpload = Boolean(activeProject) && (chapters.length > 0 || Boolean(uploadedNovelName));
+  const hasNovelUpload =
+    Boolean(activeProject) &&
+    (chapters.length > 0 || Boolean(uploadedNovelName) || Boolean(activeProject && HAS_UPLOAD_STAGES.has(activeProject.stage)));
   const statusText = useMemo(() => {
-    if (!activeProject) return "暂无项目";
+    if (!activeProject) return "等待项目创建";
     if (!hasNovelUpload) return "正在等待用户上传";
     if (!scenePlan) return "正在等待生成场景";
     if (!scenePlanConfirmed) return "正在等待用户确认场景计划";
     if (!scriptPreview) return "正在等待生成剧本";
     return "剧本已生成";
   }, [activeProject, hasNovelUpload, scenePlan, scenePlanConfirmed, scriptPreview]);
+
+  if (!initialYaml && (authChecking || !authUser)) {
+    return (
+      <div className="figma-workspace figma-auth-workspace">
+        <AuthPane error={authError} loading={authLoading || authChecking} onSubmit={handleAuthSubmit} />
+      </div>
+    );
+  }
 
   return (
     <div className="figma-workspace">
@@ -450,6 +587,7 @@ export default function App({ initialYaml }: AppProps) {
           collapsed={sidebarCollapsed}
           currentProject={activeProject}
           error={error}
+          authUser={authUser}
           loading={loading}
           canCreateProject={canCreateProject}
           mode={mode}
@@ -460,6 +598,7 @@ export default function App({ initialYaml }: AppProps) {
           viewMode={viewMode}
           onNewProject={handleNewProject}
           onNewProjectNameChange={setNewProjectName}
+          onLogout={handleLogout}
           onSelectProject={(projectId) => {
             setActiveProjectId(projectId);
             resetArtifactsForProject();
@@ -493,7 +632,6 @@ export default function App({ initialYaml }: AppProps) {
           <main className="figma-conversation" aria-label="对话区">
             <div className="figma-conversation-body figma-empty-workspace-body">
               <section className="figma-empty-prompt">
-                <h2>暂无项目</h2>
                 <p>请先新建项目，然后上传小说并完成风格设计。</p>
               </section>
             </div>
@@ -513,6 +651,8 @@ export default function App({ initialYaml }: AppProps) {
           yaml={scriptPreview?.yaml ?? null}
           onConfirmScenePlan={handleConfirmScenePlan}
           onExport={handleExport}
+          onGenerateScenePlan={handleGenerateScenePlan}
+          onGenerateScript={handleGenerateScript}
         />
       </div>
     </div>

@@ -1,17 +1,18 @@
 from app.services.run_service import create_project_run
+from app.services.project_service import require_project
 from app.services.store import STORE, now_utc
 
 
-def list_primary_messages(project_id: str) -> dict:
-    project = STORE.projects[project_id]
+def list_primary_messages(project_id: str, db=None) -> dict:
+    project = require_project(project_id, db)
     return {
         "conversation_id": project["primary_conversation_id"],
         "messages": STORE.conversations.get(project_id, []),
     }
 
 
-def send_message(project_id: str, content: str) -> dict:
-    project = STORE.projects[project_id]
+def send_message(project_id: str, content: str, db=None) -> dict:
+    project = require_project(project_id, db)
     message = {
         "message_id": STORE.next_id("msg"),
         "conversation_id": project["primary_conversation_id"],
@@ -23,10 +24,10 @@ def send_message(project_id: str, content: str) -> dict:
     return message
 
 
-def modify_script(project_id: str, message: str, target: dict) -> dict:
-    if target.get("type") == "scene" and target.get("scene_id"):
-        send_message(project_id, message)
+def modify_script(project_id: str, message: str, target: dict, db=None) -> dict:
+    target_type = target.get("type")
+    if target_type == "script" or (target_type == "scene" and target.get("scene_id")):
+        send_message(project_id, message, db)
         run = create_project_run(project_id, "conversation_edit", "conversation_edit", ["conversation_edit", "validation"])
         return {"run_id": run["run_id"], "status": "running", "stage": "conversation_edit"}
     raise PermissionError("scene_plan_change_required")
-

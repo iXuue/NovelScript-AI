@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import previewEmptyArt from "../assets/coda-reading-book-3x.webp";
 import type { EvidenceLookupResult, ExportFormat, ExportResult, ScenePlan, ScriptCurrentForUi } from "../types";
 import { EvidenceModal } from "./EvidenceModal";
 import { ExportMenu } from "./ExportMenu";
@@ -19,6 +20,8 @@ type Props = {
   fallbackEvidence: Record<string, EvidenceLookupResult>;
   onExport: (format: ExportFormat) => void;
   onConfirmScenePlan: () => void;
+  onGenerateScenePlan: () => void;
+  onGenerateScript: () => void;
 };
 
 function LegacyResultPane({
@@ -121,6 +124,8 @@ export function ResultPane({
   viewMode,
   yaml,
   onConfirmScenePlan,
+  onGenerateScenePlan,
+  onGenerateScript,
   onExport
 }: Props) {
   const [evidenceBlockId, setEvidenceBlockId] = useState<string | null>(null);
@@ -142,6 +147,16 @@ export function ResultPane({
           </section>
         ) : null}
 
+        {viewMode === "scene-plan" && !scenePlan ? (
+          <section className="figma-result-empty" aria-label="成果空状态">
+            <img className="figma-empty-art" src={previewEmptyArt} alt="" aria-hidden="true" />
+            <p>{statusText}</p>
+            <button className="figma-primary" disabled={loading || !projectId} type="button" onClick={onGenerateScenePlan}>
+              生成场景计划
+            </button>
+          </section>
+        ) : null}
+
         {viewMode === "scene-plan" && scenePlan ? (
           <section className="figma-scene-plan">
             <div className="figma-result-title-row">
@@ -149,9 +164,15 @@ export function ResultPane({
                 <h3>场景计划</h3>
                 <p>{scenePlan.confirmed || scenePlanConfirmed ? "已确认，可继续生成剧本。" : "确认前仅用于查看，不开放字段编辑。"}</p>
               </div>
-              <button className="figma-primary" disabled={loading || scenePlan.confirmed || scenePlanConfirmed} type="button" onClick={onConfirmScenePlan}>
-                {scenePlan.confirmed || scenePlanConfirmed ? "已确认" : "确认场景计划"}
-              </button>
+              {scenePlan.confirmed || scenePlanConfirmed ? (
+                <button className="figma-primary" disabled={loading || Boolean(yaml)} type="button" onClick={onGenerateScript}>
+                  {yaml ? "剧本已生成" : "生成剧本"}
+                </button>
+              ) : (
+                <button className="figma-primary" disabled={loading} type="button" onClick={onConfirmScenePlan}>
+                  确认场景计划
+                </button>
+              )}
             </div>
             <div className="figma-scene-cards">
               {scenePlan.scenes.map((scene) => (
@@ -174,6 +195,18 @@ export function ResultPane({
                 </article>
               ))}
             </div>
+          </section>
+        ) : null}
+
+        {viewMode === "script" && !yaml ? (
+          <section className="figma-result-empty" aria-label="成果空状态">
+            <img className="figma-empty-art" src={previewEmptyArt} alt="" aria-hidden="true" />
+            <p>{statusText}</p>
+            {scenePlanConfirmed ? (
+              <button className="figma-primary" disabled={loading || !projectId} type="button" onClick={onGenerateScript}>
+                生成剧本
+              </button>
+            ) : null}
           </section>
         ) : null}
 
@@ -201,11 +234,10 @@ export function ResultPane({
           </section>
         ) : null}
 
-        {(!scenePlan && viewMode === "scene-plan") || (!yaml && viewMode === "script") || viewMode === "conversation" ? (
+        {viewMode === "conversation" ? (
           <section className="figma-result-empty" aria-label="成果空状态">
-            <div className="figma-empty-mark" aria-hidden="true" />
-            <h3>{statusText}</h3>
-            <p>等待场景计划/剧本生成后展示</p>
+            <img className="figma-empty-art" src={previewEmptyArt} alt="" aria-hidden="true" />
+            <p>{statusText}</p>
           </section>
         ) : null}
       </div>

@@ -1,6 +1,9 @@
 import type {
   AgentProgress,
+  AuthSession,
+  AuthUser,
   ChapterDraft,
+  ConversationMessage,
   EvidenceLookupResult,
   ExportFormat,
   ExportResult,
@@ -10,28 +13,74 @@ import type {
   ScenePlan,
   ScriptCurrentForUi,
   ScriptPreview,
-  StyleSource,
-  ConversationMessage
+  StyleSource
 } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+let authToken: string | null = null;
+
+type ApiErrorBody = {
+  error?: {
+    code?: string;
+    message?: string;
+    details?: Record<string, unknown>;
+  };
+};
+
+export class ApiError extends Error {
+  status: number;
+  code: string;
+  details: Record<string, unknown>;
+
+  constructor(status: number, body: ApiErrorBody = {}) {
+    const message = body.error?.message ?? `Request failed: ${status}`;
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = body.error?.code ?? "http_error";
+    this.details = body.error?.details ?? {};
+  }
+}
+
+export function setAuthToken(token: string | null) {
+  authToken = token;
+}
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...init?.headers
     }
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload?.error?.message ?? `Request failed: ${response.status}`);
+    const payload = (await response.json().catch(() => ({}))) as ApiErrorBody;
+    throw new ApiError(response.status, payload);
   }
   if (response.status === 204) {
     return undefined as T;
   }
   return response.json() as Promise<T>;
+}
+
+export async function registerUser(loginId: string, password: string): Promise<AuthSession> {
+  return requestJson<AuthSession>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ login_id: loginId, password })
+  });
+}
+
+export async function loginUser(loginId: string, password: string): Promise<AuthSession> {
+  return requestJson<AuthSession>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ login_id: loginId, password })
+  });
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  return requestJson<AuthUser>("/auth/me");
 }
 
 export async function createProject(name: string): Promise<ProjectSummary> {

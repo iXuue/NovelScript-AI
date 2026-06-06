@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.auth import get_current_user
 from app.api.errors import api_error
 from app.core.database import get_db
 from app.domain.artifacts import ProjectStage
+from app.models.user import User
 from app.services.chapter_service import UploadedMarkdownDocument, assign_paragraph_ids, detect_documents_chapters
 from app.services.chapter_persistence_service import (
     confirm_project_chapters,
@@ -12,7 +14,7 @@ from app.services.chapter_persistence_service import (
     replace_project_chapters,
 )
 from app.services.checkpoint_service import create_checkpoint
-from app.services.input_adapter import normalize_to_markdown
+from app.services.input_adapter import normalize_to_markdown, parse_multipart_files
 from app.services.project_service import require_project, update_project_stage, update_project_stage_in_db
 from app.services.store import STORE
 
@@ -20,20 +22,23 @@ router = APIRouter()
 
 
 @router.post("/projects/{project_id}/uploads")
-async def upload_novel(project_id: str, request: Request, db: Session = Depends(get_db)):
+async def upload_novel(
+    project_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        require_project(project_id)
-        form = await request.form()
-        uploads = [item for item in [*form.getlist("files"), *form.getlist("file")] if hasattr(item, "read")]
+        require_project(project_id, db, user_id=current_user.user_id)
+        uploads = parse_multipart_files(await request.body(), request.headers.get("content-type", ""), ["files", "file"])
         if not uploads:
             raise ValueError("file field is required")
         documents = []
         for upload in uploads:
-            content = await upload.read()
             documents.append(
                 UploadedMarkdownDocument(
-                    filename=upload.filename or "upload.txt",
-                    markdown=normalize_to_markdown(upload.filename or "upload.txt", content),
+                    filename=upload.filename,
+                    markdown=normalize_to_markdown(upload.filename, upload.content),
                 )
             )
     except KeyError:
@@ -61,9 +66,13 @@ async def upload_novel(project_id: str, request: Request, db: Session = Depends(
 
 
 @router.get("/projects/{project_id}/chapters/pending")
-def get_pending_chapters(project_id: str, db: Session = Depends(get_db)):
+def get_pending_chapters(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        require_project(project_id)
+        require_project(project_id, db, user_id=current_user.user_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
     return {"chapters": list_pending_chapter_drafts(db, project_id)}
@@ -74,9 +83,14 @@ class ConfirmChaptersRequest(BaseModel):
 
 
 @router.post("/projects/{project_id}/chapters/confirm")
-def confirm_chapters(project_id: str, payload: ConfirmChaptersRequest, db: Session = Depends(get_db)):
+def confirm_chapters(
+    project_id: str,
+    payload: ConfirmChaptersRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        require_project(project_id)
+        require_project(project_id, db, user_id=current_user.user_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
     try:

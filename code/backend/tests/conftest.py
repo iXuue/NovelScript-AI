@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db, import_models
 from app.main import app
+from app.services.auth_service import create_user, issue_token
 from app.services.llm_provider import LLMProvider, LLMRequest, LLMResponse, LLMUsage, get_llm_provider
 from app.services.store import STORE
 
@@ -111,6 +112,42 @@ def reset_store():
 
 @pytest.fixture()
 def client():
+    import_models()
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+
+    def override_get_db():
+        with Session(engine) as session:
+            yield session
+
+    fake_provider = FakeAnalysisLLMProvider()
+    with Session(engine) as session:
+        user = create_user(session, "test-user", "password123")
+        user_id = user.user_id
+        token = issue_token(session, user)
+
+    def override_get_llm_provider():
+        return fake_provider
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_llm_provider] = override_get_llm_provider
+    try:
+        test_client = TestClient(app)
+        test_client.headers.update({"Authorization": f"Bearer {token}"})
+        test_client.auth_token = token
+        test_client.auth_user_id = user_id
+        test_client.fake_llm_provider = fake_provider
+        yield test_client
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def unauth_client():
     import_models()
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",

@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 import type { ExportFormat, ExportResult } from "../types";
 
 type Props = {
@@ -17,9 +19,11 @@ const formats: Array<{ value: ExportFormat; label: string }> = [
 ];
 
 export function ExportMenu({ disabled, loading, latestExport, onExport }: Props) {
+  const selectRef = useRef<HTMLSelectElement>(null);
+
   return (
     <div className="export-menu">
-      <select aria-label="导出格式" disabled={disabled || loading} id="export-format" defaultValue="yaml">
+      <select aria-label="导出格式" disabled={disabled || loading} ref={selectRef} defaultValue="yaml">
         {formats.map((format) => (
           <option key={format.value} value={format.value}>
             {format.label}
@@ -31,8 +35,7 @@ export function ExportMenu({ disabled, loading, latestExport, onExport }: Props)
         disabled={disabled || loading}
         type="button"
         onClick={() => {
-          const select = document.getElementById("export-format") as HTMLSelectElement | null;
-          onExport((select?.value ?? "yaml") as ExportFormat);
+          onExport((selectRef.current?.value ?? "yaml") as ExportFormat);
         }}
       >
         {loading ? "导出中" : "导出"}
@@ -41,4 +44,3 @@ export function ExportMenu({ disabled, loading, latestExport, onExport }: Props)
     </div>
   );
 }
-
