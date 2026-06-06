@@ -46,6 +46,7 @@ class ScenePlanScene(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     source_chapter_ids: Mapped[list] = mapped_column(json_list_type, nullable=False, default=list)
     source_evidence_ids: Mapped[list] = mapped_column(json_list_type, nullable=False, default=list)
+    source_paragraph_ids: Mapped[list] = mapped_column(json_list_type, nullable=False, default=list)
     interior_exterior: Mapped[str] = mapped_column(String(40), nullable=False)
     location: Mapped[str] = mapped_column(String(500), nullable=False)
     time: Mapped[str] = mapped_column(String(200), nullable=False)

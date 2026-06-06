@@ -65,11 +65,14 @@ def _replace_story_bible(db: Session, project_id: str, payload: dict, source: st
 def _story_bible_prompt(summaries: list[ChapterSummary], evidence_items: list[EvidenceItem]) -> str:
     return (
         "你是 Story Bible Worker。请基于章节结构化摘要和原文证据索引生成项目级故事记忆。\n"
-        "硬性规则：只基于输入材料，不直接写剧本，不编造没有证据支撑的设定；不确定时使用空数组。\n"
+        "硬性规则：只基于输入材料，不直接写剧本，不编造没有证据支撑的设定；不确定时，只有数组字段可以使用空数组。\n"
         "Story Bible 只作为项目记忆和生成约束依据，不直接输出剧本内容，只用于保持人物、关系、地点、时间线和伏笔一致。\n"
         "只输出 JSON object，不要 Markdown，不要解释。\n"
         "JSON schema: title, story_type, tone, logline, theme, main_characters(list), "
         "relationships(list), locations(list), timeline(list), central_conflict, foreshadowing(list)。\n"
+        "返回字段规则：title、story_type、tone、logline、theme、central_conflict 必须存在，且必须是非空字符串。\n"
+        "数组字段规则：main_characters、relationships、locations、timeline、foreshadowing 必须存在，且必须是数组；证据不足时可返回空数组。\n"
+        "theme 是故事主题或核心命题；如果证据不足以明确提取，请填写\"未从证据中明确提取\"，不要返回空字符串、null 或省略字段。\n"
         f"chapter_summaries:\n{_summary_block(summaries)}\n\n"
         f"evidence_index:\n{_evidence_block(evidence_items)}"
     )

@@ -2,15 +2,15 @@ from app.core.database import get_db
 from app.models.analysis import ChapterSummary, EvidenceItem
 
 
-def test_scene_plan_generation_persists_chapter_summaries_and_evidence_from_confirmed_chapters(client):
-    project = client.post("/projects", json={"name": "分析项目"}).json()
+def test_scene_plan_generation_persists_chapter_summaries_without_evidence_items(client):
+    project = client.post("/projects", json={"name": "Analysis project"}).json()
     project_id = project["project_id"]
     upload = client.post(
         f"/projects/{project_id}/uploads",
         files={
             "file": (
                 "novel.md",
-                "# 第一章 雨夜\n\n她回来了。\n\n门开了。\n\n# 第二章 旧信\n\n信封泛黄。",
+                "# Chapter 1\n\nShe returns.\n\nThe door opens.\n\n# Chapter 2\n\nThe letter is old.",
             )
         },
     )
@@ -38,16 +38,12 @@ def test_scene_plan_generation_persists_chapter_summaries_and_evidence_from_conf
         )
 
         assert [summary.chapter_id for summary in summaries] == ["CH001", "CH002"]
-        assert summaries[0].summary == "LLM章节摘要"
+        assert summaries[0].summary == "Chapter summary"
         assert summaries[0].source == "fake-analysis"
         task_types = [request.task_type for request in client.fake_llm_provider.requests]
         assert task_types.count("chapter_summary") == 2
-        assert task_types.count("evidence_extraction") == 2
-        assert [item.evidence_id for item in evidence_items] == ["EV001", "EV002"]
-        assert evidence_items[0].paragraph_id == "CH001_P001"
-        assert evidence_items[0].evidence_type == "关键事件"
-        assert evidence_items[0].explanation == "主角归来推动剧情。"
-        assert evidence_items[0].importance == 5
-        assert evidence_items[0].must_keep is True
+        assert task_types.count("scene_plan_chapter") == 2
+        assert "evidence_extraction" not in task_types
+        assert evidence_items == []
     finally:
         db.close()

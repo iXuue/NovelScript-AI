@@ -88,6 +88,7 @@ def generate_with_context_log(
     response_format: str = "json",
     db=None,
     project_id: str | None = None,
+    run_id: str | None = None,
     step_type: str | None = None,
     chunk_range: dict | None = None,
     source_item_count: int | None = None,
@@ -95,33 +96,53 @@ def generate_with_context_log(
     max_chars: int = DEFAULT_MAX_LLM_PROMPT_CHARS,
 ) -> LLMResponse:
     clamped_prompt = clamp_prompt(prompt, max_chars)
-    response = llm_provider.generate(
-        LLMRequest(
-            task_type=task_type,
-            prompt=clamped_prompt,
-            response_format=response_format,
+    base_payload = {
+        "project_id": project_id,
+        "run_id": run_id,
+        "step_type": step_type or task_type,
+        "task_type": task_type,
+        "response_format": response_format,
+        "model_name": getattr(llm_provider, "model", "unknown"),
+        "raw_prompt_characters": len(prompt),
+        "prompt_characters": len(clamped_prompt),
+        "truncated_characters": max(0, len(prompt) - len(clamped_prompt)),
+        "estimated_input_tokens": estimate_tokens(clamped_prompt),
+        "chunk_range": chunk_range,
+        "source_item_count": source_item_count,
+        "included_item_count": included_item_count,
+        "omitted_item_count": _omitted_count(source_item_count, included_item_count),
+    }
+    _write_llm_context_log(db, run_id, {**base_payload, "event_type": "llm_request_started"})
+    try:
+        response = llm_provider.generate(
+            LLMRequest(
+                task_type=task_type,
+                prompt=clamped_prompt,
+                response_format=response_format,
+            )
         )
-    )
+    except Exception as exc:
+        _write_llm_context_log(
+            db,
+            run_id,
+            {
+                **base_payload,
+                "event_type": "llm_request_failed",
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            },
+        )
+        raise
     _write_llm_context_log(
         db,
+        run_id,
         {
-            "event_type": "llm_request",
-            "project_id": project_id,
-            "step_type": step_type or task_type,
-            "task_type": task_type,
-            "response_format": response_format,
+            **base_payload,
+            "event_type": "llm_request_completed",
             "model_name": response.model_name,
-            "raw_prompt_characters": len(prompt),
-            "prompt_characters": len(clamped_prompt),
-            "truncated_characters": max(0, len(prompt) - len(clamped_prompt)),
-            "estimated_input_tokens": estimate_tokens(clamped_prompt),
             "provider_input_tokens": response.usage.input_tokens,
             "provider_output_tokens": response.usage.output_tokens,
             "token_estimate_used": response.usage.input_tokens <= 0,
-            "chunk_range": chunk_range,
-            "source_item_count": source_item_count,
-            "included_item_count": included_item_count,
-            "omitted_item_count": _omitted_count(source_item_count, included_item_count),
         },
     )
     return response
@@ -133,9 +154,9 @@ def _omitted_count(source_item_count: int | None, included_item_count: int | Non
     return max(0, source_item_count - included_item_count)
 
 
-def _write_llm_context_log(db, payload: dict) -> None:
+def _write_llm_context_log(db, run_id: str | None, payload: dict) -> None:
     if db is None:
         return
     from app.services.developer_log_service import write_developer_log
 
-    write_developer_log(None, payload, db)
+    write_developer_log(run_id, payload, db)

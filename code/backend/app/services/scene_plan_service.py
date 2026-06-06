@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.artifacts import ArtifactStatus, ProjectStage
 from app.models.analysis import ChapterSummary, EvidenceItem
-from app.models.chapter import Chapter
+from app.models.chapter import Chapter, Paragraph
 from app.models.repair import RepairAttempt
 from app.models.scene_plan import ScenePlan, ScenePlanScene, ScenePlanValidation
 from app.models.story import StoryBible
@@ -32,6 +32,7 @@ TEXT_FIELDS = [
 LIST_FIELDS = [
     "source_chapter_ids",
     "source_evidence_ids",
+    "source_paragraph_ids",
     "characters",
     "must_cover_plot",
     "must_keep_dialogue",
@@ -39,39 +40,71 @@ LIST_FIELDS = [
     "must_keep_foreshadowing",
 ]
 MAX_REPAIR_ATTEMPTS = 2
+CHAPTER_SCENE_TEXT_FIELDS = [
+    "title",
+    "interior_exterior",
+    "location",
+    "time",
+    "scene_function",
+    "core_conflict",
+    "adaptation_note",
+]
+CHAPTER_SCENE_LIST_FIELDS = [
+    "source_paragraph_ids",
+    "characters",
+    "must_cover_plot",
+    "must_keep_dialogue",
+    "must_keep_visual_elements",
+    "must_keep_foreshadowing",
+]
 
 
-def generate_scene_plan_artifact(db: Session, project_id: str, llm_provider: LLMProvider | None) -> dict:
+def generate_scene_plan_artifact(
+    db: Session,
+    project_id: str,
+    llm_provider: LLMProvider | None,
+    run_id: str | None = None,
+) -> dict:
     chapters = _confirmed_chapters(db, project_id)
     summaries = _chapter_summaries(db, project_id)
-    evidence_items = _evidence_items(db, project_id)
-    story_bible = _story_bible(db, project_id)
     style_profile = _style_profile(db, project_id)
     if not chapters:
         raise RuntimeError("scene_plan requires confirmed chapters")
-    if story_bible is None:
-        raise RuntimeError("scene_plan requires story_bible")
     if llm_provider is None:
         raise RuntimeError("LLM provider is required to generate Scene Plan")
 
-    response = generate_with_context_log(
-        llm_provider,
-        task_type="scene_plan",
-        prompt=_scene_plan_prompt(chapters, summaries, evidence_items, story_bible, style_profile),
-        response_format="json",
-        db=db,
-        project_id=project_id,
-        step_type="scene_plan",
-        source_item_count=len(chapters) + len(summaries) + len(evidence_items),
-        included_item_count=len(chapters) + len(summaries) + min(len(evidence_items), 80),
-    )
+    summary_by_chapter = {summary.chapter_id: summary for summary in summaries}
+    paragraphs_by_chapter = _paragraphs_by_chapter(db, project_id)
+    scenes: list[dict] = []
+    model_names: list[str] = []
+    for chapter in chapters:
+        paragraphs = paragraphs_by_chapter.get(chapter.chapter_id, [])
+        summary = summary_by_chapter.get(chapter.chapter_id)
+        if summary is None:
+            raise RuntimeError(f"scene_plan requires chapter summary for {chapter.chapter_id}")
+        response = generate_with_context_log(
+            llm_provider,
+            task_type="scene_plan_chapter",
+            prompt=_scene_plan_chapter_prompt(chapter, summary, paragraphs, style_profile),
+            response_format="json",
+            db=db,
+            project_id=project_id,
+            run_id=run_id,
+            step_type="scene_plan",
+            chunk_range={"chapter_id": chapter.chapter_id, "chapter_order": chapter.order},
+            source_item_count=1 + len(paragraphs),
+            included_item_count=1 + len(paragraphs),
+        )
+        model_names.append(response.model_name)
+        scenes.extend(_validate_chapter_scene_plan_payload(_load_json_object(response.text), chapter, paragraphs))
+
     payload = _validate_scene_plan_payload(
-        _load_json_object(response.text),
+        {"scenes": _renumber_scenes(scenes)},
         chapter_ids={chapter.chapter_id for chapter in chapters},
-        evidence_ids={evidence.evidence_id for evidence in evidence_items},
+        paragraph_ids={paragraph.paragraph_id for paragraphs in paragraphs_by_chapter.values() for paragraph in paragraphs},
     )
-    scene_plan = _replace_scene_plan(db, project_id, payload["scenes"], response.model_name)
-    _validate_and_store_scene_plan(db, scene_plan, chapters, summaries, evidence_items, story_bible, llm_provider)
+    scene_plan = _replace_scene_plan(db, project_id, payload["scenes"], ",".join(sorted(set(model_names))) or "unknown")
+    _validate_and_store_scene_plan(db, scene_plan, chapters, paragraphs_by_chapter)
     return scene_plan_to_dict(scene_plan)
 
 
@@ -86,7 +119,12 @@ def get_current_scene_plan(db: Session, project_id: str) -> dict | None:
     return scene_plan_to_dict(scene_plan)
 
 
-def repair_current_scene_plan(db: Session, project_id: str, llm_provider: LLMProvider | None) -> dict:
+def repair_current_scene_plan(
+    db: Session,
+    project_id: str,
+    llm_provider: LLMProvider | None,
+    run_id: str | None = None,
+) -> dict:
     scene_plan = (
         db.query(ScenePlan)
         .filter(ScenePlan.project_id == project_id, ScenePlan.status == ArtifactStatus.current, ScenePlan.is_current.is_(True))
@@ -102,32 +140,10 @@ def repair_current_scene_plan(db: Session, project_id: str, llm_provider: LLMPro
     if llm_provider is None:
         raise RuntimeError("LLM provider is required to repair Scene Plan")
 
-    chapters = _confirmed_chapters(db, project_id)
-    summaries = _chapter_summaries(db, project_id)
-    evidence_items = _evidence_items(db, project_id)
-    story_bible = _story_bible(db, project_id)
-    if story_bible is None:
-        raise RuntimeError("scene_plan repair requires story_bible")
-
-    response = generate_with_context_log(
-        llm_provider,
-        task_type="scene_plan_repair",
-        prompt=_scene_plan_repair_prompt(scene_plan, validation, chapters, summaries, evidence_items, story_bible),
-        response_format="json",
-        db=db,
-        project_id=project_id,
-        step_type="scene_plan_repair",
-        source_item_count=len(chapters) + len(summaries) + len(evidence_items),
-        included_item_count=len(chapters) + len(summaries) + min(len(evidence_items), 80),
-    )
-    payload = _validate_scene_plan_payload(
-        _load_json_object(response.text),
-        chapter_ids={chapter.chapter_id for chapter in chapters},
-        evidence_ids={evidence.evidence_id for evidence in evidence_items},
-    )
     previous_scene_plan_id = scene_plan.scene_plan_id
-    repaired = _replace_scene_plan(db, project_id, payload["scenes"], response.model_name)
-    repaired_validation = _validate_and_store_scene_plan(db, repaired, chapters, summaries, evidence_items, story_bible, llm_provider)
+    repaired_dict = generate_scene_plan_artifact(db, project_id, llm_provider, run_id=run_id)
+    repaired = db.query(ScenePlan).filter(ScenePlan.scene_plan_id == repaired_dict["scene_plan_id"]).one()
+    repaired_validation = _latest_validation(repaired)
     _record_repair_attempt(
         db,
         project_id=project_id,
@@ -136,8 +152,8 @@ def repair_current_scene_plan(db: Session, project_id: str, llm_provider: LLMPro
         result_artifact_id=repaired.scene_plan_id,
         scene_id=None,
         issues=validation.issues,
-        status="success" if repaired_validation.passed else "failed",
-        source=response.model_name,
+        status="success" if repaired_validation is not None and repaired_validation.passed else "failed",
+        source=repaired.source,
     )
     STORE.scene_plans[project_id] = scene_plan_to_dict(repaired)
     return scene_plan_to_dict(repaired)
@@ -189,6 +205,7 @@ def scene_plan_to_dict(scene_plan: ScenePlan) -> dict:
                 "title": scene.title,
                 "source_chapter_ids": scene.source_chapter_ids,
                 "source_evidence_ids": scene.source_evidence_ids,
+                "source_paragraph_ids": scene.source_paragraph_ids,
                 "interior_exterior": scene.interior_exterior,
                 "location": scene.location,
                 "time": scene.time,
@@ -250,6 +267,7 @@ def _replace_scene_plan(db: Session, project_id: str, scenes: list[dict], source
             title=scene["title"],
             source_chapter_ids=scene["source_chapter_ids"],
             source_evidence_ids=scene["source_evidence_ids"],
+            source_paragraph_ids=scene["source_paragraph_ids"],
             interior_exterior=scene["interior_exterior"],
             location=scene["location"],
             time=scene["time"],
@@ -276,23 +294,9 @@ def _validate_and_store_scene_plan(
     db: Session,
     scene_plan: ScenePlan,
     chapters: list[Chapter],
-    summaries: list[ChapterSummary],
-    evidence_items: list[EvidenceItem],
-    story_bible: StoryBible,
-    llm_provider: LLMProvider,
+    paragraphs_by_chapter: dict[str, list[Paragraph]],
 ) -> ScenePlanValidation:
-    response = generate_with_context_log(
-        llm_provider,
-        task_type="scene_plan_validation",
-        prompt=_scene_plan_validation_prompt(scene_plan, chapters, summaries, evidence_items, story_bible),
-        response_format="json",
-        db=db,
-        project_id=scene_plan.project_id,
-        step_type="scene_plan_validation",
-        source_item_count=len(chapters) + len(summaries) + len(evidence_items),
-        included_item_count=len(chapters) + len(summaries) + min(len(evidence_items), 80),
-    )
-    payload = _validate_scene_plan_validation_payload(_load_json_object(response.text))
+    payload = _deterministic_scene_plan_validation(scene_plan, chapters, paragraphs_by_chapter)
     timestamp = now_utc()
     validation = ScenePlanValidation(
         scene_plan_id=scene_plan.scene_plan_id,
@@ -301,7 +305,7 @@ def _validate_and_store_scene_plan(
         issues=payload["issues"],
         suggestions=payload["suggestions"],
         coverage=payload["coverage"],
-        source=response.model_name,
+        source="deterministic",
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -309,6 +313,121 @@ def _validate_and_store_scene_plan(
     db.commit()
     db.refresh(scene_plan)
     return validation
+
+
+def _scene_plan_chapter_prompt(
+    chapter: Chapter,
+    summary: ChapterSummary,
+    paragraphs: list[Paragraph],
+    style_profile: StyleProfile | None,
+) -> str:
+    style_text = (
+        style_profile.profile_text
+        if style_profile is not None
+        else "Use a neutral, clear adaptation style. Keep scenes filmable, concise, and faithful to the source material."
+    )
+    return (
+        "You are the Scene Plan Worker for one confirmed novel chapter.\n"
+        "Create filmable scene-outline entries for this chapter only. Use only supplied chapter summary and paragraphs.\n"
+        "Return only one JSON object. No Markdown. No explanation.\n"
+        "JSON schema: {\"scenes\":[{\"title\":\"...\",\"source_paragraph_ids\":[\"CH001_P001\"],"
+        "\"interior_exterior\":\"内景/外景/内外景\",\"location\":\"...\",\"time\":\"...\",\"characters\":[\"...\"],"
+        "\"must_cover_plot\":[\"...\"],\"must_keep_dialogue\":[\"...\"],"
+        "\"must_keep_visual_elements\":[\"...\"],\"must_keep_foreshadowing\":[\"...\"],"
+        "\"scene_function\":\"...\",\"core_conflict\":\"...\",\"adaptation_note\":\"...\"}]}\n"
+        "Rules:\n"
+        "- Generate one or more scenes for this chapter.\n"
+        "- source_paragraph_ids must reference paragraph IDs from this chapter only and must not be empty.\n"
+        "- Do not invent major characters, locations, or plot facts beyond the supplied materials.\n"
+        "- Use [] for optional list fields only when nothing relevant is present.\n"
+        "- Make scene_function describe what the scene achieves structurally.\n"
+        "- Make adaptation_note describe how to translate novel material into screen action.\n\n"
+        f"chapter:\n{json.dumps({'chapter_id': chapter.chapter_id, 'order': chapter.order, 'title': chapter.title}, ensure_ascii=False)}\n\n"
+        f"chapter_summary:\n{_one_summary_block(summary)}\n\n"
+        f"paragraphs:\n{_paragraph_block(paragraphs)}\n\n"
+        f"style_profile:\n{style_text}"
+    )
+
+
+def _validate_chapter_scene_plan_payload(payload: dict, chapter: Chapter, paragraphs: list[Paragraph]) -> list[dict]:
+    scenes = payload.get("scenes")
+    if not isinstance(scenes, list) or not scenes:
+        raise RuntimeError("scene_plan_chapter field scenes must be a non-empty list")
+    paragraph_ids = {paragraph.paragraph_id for paragraph in paragraphs}
+    validated_scenes = []
+    for scene in scenes:
+        if not isinstance(scene, dict):
+            raise RuntimeError("scene_plan_chapter scenes must contain JSON objects")
+        validated = {
+            "source_chapter_ids": [chapter.chapter_id],
+            "source_evidence_ids": [],
+        }
+        for field in CHAPTER_SCENE_TEXT_FIELDS:
+            value = scene.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise RuntimeError(f"scene_plan_chapter scene field {field} must be a non-empty string")
+            validated[field] = value.strip()
+        for field in CHAPTER_SCENE_LIST_FIELDS:
+            value = scene.get(field)
+            if not isinstance(value, list):
+                raise RuntimeError(f"scene_plan_chapter scene field {field} must be a list")
+            validated[field] = value
+        if not validated["source_paragraph_ids"]:
+            raise RuntimeError("scene_plan_chapter source_paragraph_ids must be non-empty")
+        unknown_paragraphs = set(validated["source_paragraph_ids"]) - paragraph_ids
+        if unknown_paragraphs:
+            raise RuntimeError(f"scene_plan_chapter references unknown paragraphs: {sorted(unknown_paragraphs)}")
+        validated_scenes.append(validated)
+    return validated_scenes
+
+
+def _renumber_scenes(scenes: list[dict]) -> list[dict]:
+    numbered = []
+    for index, scene in enumerate(scenes, start=1):
+        numbered.append({**scene, "scene_id": f"S{index:03d}", "order": index})
+    return numbered
+
+
+def _deterministic_scene_plan_validation(
+    scene_plan: ScenePlan,
+    chapters: list[Chapter],
+    paragraphs_by_chapter: dict[str, list[Paragraph]],
+) -> dict:
+    issues = []
+    chapter_ids = {chapter.chapter_id for chapter in chapters}
+    paragraph_ids = {paragraph.paragraph_id for paragraphs in paragraphs_by_chapter.values() for paragraph in paragraphs}
+    covered_chapters = set()
+    covered_paragraphs = set()
+    scenes = sorted(scene_plan.scenes, key=lambda scene: scene.order)
+    if not scenes:
+        issues.append({"code": "empty_scene_plan", "message": "Scene Plan must contain at least one scene"})
+    for expected_order, scene in enumerate(scenes, start=1):
+        if scene.order != expected_order or scene.scene_id != f"S{expected_order:03d}":
+            issues.append({"code": "invalid_order", "message": f"{scene.scene_id} order must be consecutive"})
+        if not scene.source_chapter_ids:
+            issues.append({"code": "missing_chapter_reference", "message": f"{scene.scene_id} must reference a chapter"})
+        if not scene.source_paragraph_ids:
+            issues.append({"code": "missing_paragraph_reference", "message": f"{scene.scene_id} must reference paragraphs"})
+        unknown_chapters = set(scene.source_chapter_ids) - chapter_ids
+        unknown_paragraphs = set(scene.source_paragraph_ids) - paragraph_ids
+        if unknown_chapters:
+            issues.append({"code": "unknown_chapter", "message": f"{scene.scene_id} references unknown chapters: {sorted(unknown_chapters)}"})
+        if unknown_paragraphs:
+            issues.append({"code": "unknown_paragraph", "message": f"{scene.scene_id} references unknown paragraphs: {sorted(unknown_paragraphs)}"})
+        covered_chapters.update(scene.source_chapter_ids)
+        covered_paragraphs.update(scene.source_paragraph_ids)
+    missing_chapters = chapter_ids - covered_chapters
+    if missing_chapters:
+        issues.append({"code": "missing_chapter_coverage", "message": f"Missing confirmed chapters: {sorted(missing_chapters)}"})
+    return {
+        "passed": not issues,
+        "issues": issues,
+        "suggestions": [],
+        "coverage": {
+            "chapter_ids": sorted(covered_chapters & chapter_ids),
+            "paragraph_ids": sorted(covered_paragraphs & paragraph_ids),
+        },
+    }
 
 
 def _scene_plan_prompt(
@@ -344,6 +463,7 @@ def _scene_plan_prompt(
         "- must_keep_visual_elements lists visual source details that must remain on screen.\n"
         "- must_keep_foreshadowing lists foreshadowing/clues that must remain; use [] if none.\n"
         "- Do not invent new major characters, locations, or plot facts beyond the inputs.\n"
+        "- Use story_bible.theme as a continuity constraint for scene_function, core_conflict, and adaptation_note; do not redefine or overwrite the established theme.\n"
         "- Make scene_function describe what the scene achieves structurally.\n"
         "- Make adaptation_note describe how to translate novel material into screen action.\n\n"
         f"confirmed_chapters:\n{_chapter_block(chapters)}\n\n"
@@ -420,24 +540,44 @@ def _chapter_block(chapters: list[Chapter]) -> str:
     )
 
 
+def _one_summary_block(summary: ChapterSummary) -> str:
+    return json.dumps(
+        {
+            "chapter_id": summary.chapter_id,
+            "title": summary.title,
+            "summary": truncate_text(summary.summary, 1200),
+            "key_events": summary.key_events,
+            "characters": summary.characters,
+            "locations": summary.locations,
+            "conflicts": summary.conflicts,
+            "foreshadowing": summary.foreshadowing,
+            "adaptation_suggestions": summary.adaptation_suggestions,
+        },
+        ensure_ascii=False,
+    )
+
+
 def _summary_block(summaries: list[ChapterSummary]) -> str:
     return compact_lines(
         (
-        json.dumps(
-            {
-                "chapter_id": summary.chapter_id,
-                "title": summary.title,
-                "summary": truncate_text(summary.summary, 1200),
-                "key_events": summary.key_events,
-                "characters": summary.characters,
-                "locations": summary.locations,
-                "conflicts": summary.conflicts,
-                "foreshadowing": summary.foreshadowing,
-                "adaptation_suggestions": summary.adaptation_suggestions,
-            },
-            ensure_ascii=False,
-        )
-        for summary in summaries
+            _one_summary_block(summary)
+            for summary in summaries
+        ),
+        8000,
+    )
+
+
+def _paragraph_block(paragraphs: list[Paragraph]) -> str:
+    return compact_lines(
+        (
+            json.dumps(
+                {
+                    "paragraph_id": paragraph.paragraph_id,
+                    "text": truncate_text(paragraph.text, 800, ""),
+                },
+                ensure_ascii=False,
+            )
+            for paragraph in paragraphs
         ),
         8000,
     )
@@ -506,6 +646,19 @@ def _chapter_summaries(db: Session, project_id: str) -> list[ChapterSummary]:
     )
 
 
+def _paragraphs_by_chapter(db: Session, project_id: str) -> dict[str, list[Paragraph]]:
+    paragraphs = (
+        db.query(Paragraph)
+        .filter(Paragraph.project_id == project_id)
+        .order_by(Paragraph.chapter_id, Paragraph.order)
+        .all()
+    )
+    by_chapter: dict[str, list[Paragraph]] = {}
+    for paragraph in paragraphs:
+        by_chapter.setdefault(paragraph.chapter_id, []).append(paragraph)
+    return by_chapter
+
+
 def _evidence_items(db: Session, project_id: str) -> list[EvidenceItem]:
     return (
         db.query(EvidenceItem)
@@ -533,7 +686,7 @@ def _load_json_object(text: str) -> dict:
     return payload
 
 
-def _validate_scene_plan_payload(payload: dict, chapter_ids: set[str], evidence_ids: set[str]) -> dict:
+def _validate_scene_plan_payload(payload: dict, chapter_ids: set[str], paragraph_ids: set[str]) -> dict:
     scenes = payload.get("scenes")
     if not isinstance(scenes, list) or not scenes:
         raise RuntimeError("scene_plan field scenes must be a non-empty list")
@@ -558,11 +711,13 @@ def _validate_scene_plan_payload(payload: dict, chapter_ids: set[str], evidence_
         if validated["scene_id"] != f"S{expected_order:03d}":
             raise RuntimeError("scene_plan scene_id must match scene order")
         unknown_chapters = set(validated["source_chapter_ids"]) - chapter_ids
-        unknown_evidence = set(validated["source_evidence_ids"]) - evidence_ids
+        unknown_paragraphs = set(validated["source_paragraph_ids"]) - paragraph_ids
         if unknown_chapters:
             raise RuntimeError(f"scene_plan references unknown chapters: {sorted(unknown_chapters)}")
-        if unknown_evidence:
-            raise RuntimeError(f"scene_plan references unknown evidence: {sorted(unknown_evidence)}")
+        if unknown_paragraphs:
+            raise RuntimeError(f"scene_plan references unknown paragraphs: {sorted(unknown_paragraphs)}")
+        if not validated["source_paragraph_ids"]:
+            raise RuntimeError("scene_plan scene field source_paragraph_ids must be non-empty")
         seen_scene_ids.add(validated["scene_id"])
         validated_scenes.append(validated)
     return {"scenes": validated_scenes}

@@ -7,6 +7,7 @@ class ContentBlock(BaseModel):
     text: str
     speaker: str | None = None
     source_evidence_ids: list[str] = Field(default_factory=list)
+    source_paragraph_ids: list[str] = Field(default_factory=list)
 
 
 class InternalScriptScene(BaseModel):
@@ -28,4 +29,3 @@ class UserCleanScript(BaseModel):
     title: str
     characters: list[dict]
     scenes: list[dict]
-

@@ -47,7 +47,7 @@ export function EvidenceModal({ projectId, contentBlockId, fallback, onClose }: 
         {error ? <p className="error-text">{error}</p> : null}
         {!result && !error ? <p className="muted-text">正在读取来源证据</p> : null}
         {result?.evidence.map((item) => (
-          <article className="evidence-item" key={item.source_evidence_id}>
+          <article className="evidence-item" key={item.source_paragraph_id ?? item.source_evidence_id ?? `${item.chapter_id}-${item.paragraph_id}`}>
             <div className="evidence-meta">
               {item.chapter_id} / {item.paragraph_id}
             </div>

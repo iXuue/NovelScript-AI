@@ -4,15 +4,14 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.domain.artifacts import ArtifactStatus, ProjectStage
-from app.models.analysis import EvidenceItem
+from app.models.chapter import Paragraph
 from app.models.export import ExportJob
 from app.models.project import Project
 from app.models.repair import RepairAttempt
 from app.models.script import ScriptContentBlock, ScriptScene, ScriptSceneValidation, ScriptVersion
 from app.models.scene_plan import ScenePlan, ScenePlanScene
-from app.models.story import StoryBible
 from app.models.style import StyleProfile
-from app.services.context_budget_service import compact_lines, generate_with_context_log, rank_evidence_items, truncate_text
+from app.services.context_budget_service import compact_lines, generate_with_context_log, truncate_text
 from app.services.export_service import to_yaml_preview
 from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage, update_project_stage_in_db
@@ -23,7 +22,12 @@ BLOCK_TYPES = {"action", "dialogue", "narration", "transition", "note", "parenth
 MAX_REPAIR_ATTEMPTS = 2
 
 
-def generate_script_from_confirmed_scene_plan(db: Session, project_id: str, llm_provider: LLMProvider | None) -> dict:
+def generate_script_from_confirmed_scene_plan(
+    db: Session,
+    project_id: str,
+    llm_provider: LLMProvider | None,
+    run_id: str | None = None,
+) -> dict:
     scene_plan = _confirmed_scene_plan(db, project_id)
     if scene_plan is None:
         raise PermissionError("scene_plan_not_confirmed")
@@ -31,32 +35,32 @@ def generate_script_from_confirmed_scene_plan(db: Session, project_id: str, llm_
         raise RuntimeError("LLM provider is required to generate script")
 
     project = db.get(Project, project_id)
-    evidence_items = _evidence_items(db, project_id)
-    story_bible = _story_bible(db, project_id)
+    paragraphs_by_id = _paragraphs_by_id(db, project_id)
     style_profile = _style_profile(db, project_id)
     scenes = sorted(scene_plan.scenes, key=lambda scene: scene.order)
     generated_scenes = []
     model_names = []
     for scene in scenes:
-        relevant_evidence_count = len([evidence for evidence in evidence_items if evidence.evidence_id in scene.source_evidence_ids])
+        relevant_paragraphs = _source_paragraphs_for_scene(scene, paragraphs_by_id)
         response = generate_with_context_log(
             llm_provider,
             task_type="script_generation",
-            prompt=_script_scene_prompt(scene, evidence_items, story_bible, style_profile),
+            prompt=_script_scene_prompt(scene, relevant_paragraphs, style_profile),
             response_format="json",
             db=db,
             project_id=project_id,
+            run_id=run_id,
             step_type="script_generation",
             chunk_range={"scene_id": scene.scene_id, "scene_order": scene.order},
-            source_item_count=relevant_evidence_count,
-            included_item_count=min(relevant_evidence_count, 80),
+            source_item_count=len(relevant_paragraphs),
+            included_item_count=len(relevant_paragraphs),
         )
         model_names.append(response.model_name)
         generated_scenes.append(
             _validate_script_scene_payload(
                 _load_json_object(response.text),
                 scene=scene,
-                evidence_ids={evidence.evidence_id for evidence in evidence_items},
+                paragraph_ids=set(paragraphs_by_id),
             )
         )
 
@@ -67,7 +71,7 @@ def generate_script_from_confirmed_scene_plan(db: Session, project_id: str, llm_
         scenes=generated_scenes,
         source=",".join(sorted(set(model_names))) if model_names else "unknown",
     )
-    validations = _validate_and_store_script_scenes(db, version, scene_plan.scenes, evidence_items, style_profile, llm_provider)
+    validations = _validate_and_store_script_scenes(db, version, scene_plan.scenes, paragraphs_by_id)
     if any(not validation.passed for validation in validations):
         version.status = ArtifactStatus.failed
         version.updated_at = now_utc()
@@ -133,29 +137,29 @@ def repair_script_scene(db: Session, project_id: str, scene_id: str, llm_provide
     if llm_provider is None:
         raise RuntimeError("LLM provider is required to repair script scene")
 
-    evidence_items = _evidence_items(db, project_id)
+    paragraphs_by_id = _paragraphs_by_id(db, project_id)
     style_profile = _style_profile(db, project_id)
     current_blocks = sorted([block for block in version.content_blocks if block.scene_id == scene_id], key=lambda block: block.order)
-    relevant_evidence_count = len([evidence for evidence in evidence_items if evidence.evidence_id in scene_plan_scene.source_evidence_ids])
+    relevant_paragraphs = _source_paragraphs_for_scene(scene_plan_scene, paragraphs_by_id)
     response = generate_with_context_log(
         llm_provider,
         task_type="script_scene_repair",
-        prompt=_script_scene_repair_prompt(scene_plan_scene, script_scene, current_blocks, validation, evidence_items, style_profile),
+        prompt=_script_scene_repair_prompt(scene_plan_scene, script_scene, current_blocks, validation, relevant_paragraphs, style_profile),
         response_format="json",
         db=db,
         project_id=project_id,
         step_type="script_scene_repair",
         chunk_range={"scene_id": scene_id},
-        source_item_count=relevant_evidence_count + len(current_blocks),
-        included_item_count=min(relevant_evidence_count, 80) + len(current_blocks),
+        source_item_count=len(relevant_paragraphs) + len(current_blocks),
+        included_item_count=len(relevant_paragraphs) + len(current_blocks),
     )
     repaired_scene = _validate_script_scene_payload(
         _load_json_object(response.text),
         scene=scene_plan_scene,
-        evidence_ids={evidence.evidence_id for evidence in evidence_items},
+        paragraph_ids=set(paragraphs_by_id),
     )
     _replace_script_scene_content(db, version, script_scene, repaired_scene)
-    repaired_validation = _validate_and_store_one_script_scene(db, version, scene_plan_scene, script_scene, evidence_items, style_profile, llm_provider)
+    repaired_validation = _validate_and_store_one_script_scene(db, version, scene_plan_scene, script_scene, paragraphs_by_id)
     all_passed = all(validation.passed for validation in version.scene_validations)
     version.status = ArtifactStatus.current if all_passed else ArtifactStatus.failed
     version.updated_at = now_utc()
@@ -251,6 +255,7 @@ def _replace_script_version(db: Session, project_id: str, title: str, scenes: li
                     text=block["text"],
                     speaker=block["speaker"],
                     source_evidence_ids=block["source_evidence_ids"],
+                    source_paragraph_ids=block["source_paragraph_ids"],
                     created_at=timestamp,
                     updated_at=timestamp,
                 )
@@ -290,6 +295,7 @@ def _replace_script_scene_content(db: Session, version: ScriptVersion, script_sc
                 text=block["text"],
                 speaker=block["speaker"],
                 source_evidence_ids=block["source_evidence_ids"],
+                source_paragraph_ids=block["source_paragraph_ids"],
                 created_at=timestamp,
                 updated_at=timestamp,
             )
@@ -299,11 +305,9 @@ def _replace_script_scene_content(db: Session, version: ScriptVersion, script_sc
 
 def _script_scene_prompt(
     scene: ScenePlanScene,
-    evidence_items: list[EvidenceItem],
-    story_bible: StoryBible | None,
+    paragraphs: list[Paragraph],
     style_profile: StyleProfile | None,
 ) -> str:
-    relevant_evidence = [evidence for evidence in evidence_items if evidence.evidence_id in scene.source_evidence_ids]
     return (
         "You are the Script Generation Worker. Generate screenplay content for exactly one confirmed scene.\n"
         "Return only one JSON object. No Markdown. No explanation.\n"
@@ -311,7 +315,8 @@ def _script_scene_prompt(
         "\"characters\":[\"...\"],\"scene_purpose\":\"...\",\"core_conflict\":\"...\","
         "\"content_blocks\":["
         "{\"content_block_id\":\"CB001\",\"type\":\"action/dialogue/narration/transition/note\","
-        "\"text\":\"...\",\"speaker\":null,\"source_evidence_ids\":[\"EV001\"]}]}\n"
+        "\"text\":\"...\",\"speaker\":null,\"source_paragraph_ids\":[\"CH001_P001\"],"
+        "\"source_evidence_ids\":[]}]}\n"
         "Rules:\n"
         "- scene_id must match the input scene.\n"
         "- scene_info must summarize interior/exterior, location, and time.\n"
@@ -319,11 +324,11 @@ def _script_scene_prompt(
         "- Preserve required plot, dialogue, visual elements, and foreshadowing from the scene plan.\n"
         "- Block types are only action, dialogue, narration, transition, and note.\n"
         "- For dialogue blocks, speaker must be the character name and cannot be empty. For non-dialogue blocks, speaker must be null.\n"
-        "- Every content block must be traceable with source_evidence_ids when relevant.\n"
+        "- Every content block must cite source_paragraph_ids from the source_paragraphs list.\n"
+        "- source_evidence_ids is a legacy compatibility field; always return an empty array for it.\n"
         "- Do not include internal notes or analysis in text.\n\n"
         f"scene_plan_scene:\n{_scene_block(scene)}\n\n"
-        f"relevant_evidence:\n{_evidence_block(relevant_evidence)}\n\n"
-        f"story_bible:\n{_story_bible_block(story_bible)}\n\n"
+        f"source_paragraphs:\n{_paragraph_block(paragraphs)}\n\n"
         f"style_profile:\n{truncate_text(style_profile.profile_text, 3000) if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
     )
 
@@ -332,9 +337,7 @@ def _validate_and_store_script_scenes(
     db: Session,
     version: ScriptVersion,
     scene_plan_scenes: list[ScenePlanScene],
-    evidence_items: list[EvidenceItem],
-    style_profile: StyleProfile | None,
-    llm_provider: LLMProvider,
+    paragraphs_by_id: dict[str, Paragraph],
 ) -> list[ScriptSceneValidation]:
     scene_plan_by_id = {scene.scene_id: scene for scene in scene_plan_scenes}
     script_blocks_by_scene: dict[str, list[ScriptContentBlock]] = {}
@@ -349,11 +352,8 @@ def _validate_and_store_script_scenes(
             script_scene,
             scene_plan_scene,
             sorted(script_blocks_by_scene.get(script_scene.scene_id, []), key=lambda block: block.order),
-            evidence_items,
-            style_profile,
-            llm_provider,
+            paragraphs_by_id,
             timestamp,
-            db=db,
         )
         db.add(validation)
         validations.append(validation)
@@ -367,9 +367,7 @@ def _validate_and_store_one_script_scene(
     version: ScriptVersion,
     scene_plan_scene: ScenePlanScene,
     script_scene: ScriptScene,
-    evidence_items: list[EvidenceItem],
-    style_profile: StyleProfile | None,
-    llm_provider: LLMProvider,
+    paragraphs_by_id: dict[str, Paragraph],
 ) -> ScriptSceneValidation:
     db.execute(
         delete(ScriptSceneValidation).where(
@@ -391,11 +389,8 @@ def _validate_and_store_one_script_scene(
         script_scene,
         scene_plan_scene,
         blocks,
-        evidence_items,
-        style_profile,
-        llm_provider,
+        paragraphs_by_id,
         now_utc(),
-        db=db,
     )
     db.add(validation)
     db.commit()
@@ -408,32 +403,50 @@ def _build_script_scene_validation(
     script_scene: ScriptScene,
     scene_plan_scene: ScenePlanScene,
     content_blocks: list[ScriptContentBlock],
-    evidence_items: list[EvidenceItem],
-    style_profile: StyleProfile | None,
-    llm_provider: LLMProvider,
+    paragraphs_by_id: dict[str, Paragraph],
     timestamp,
-    db=None,
 ) -> ScriptSceneValidation:
-    relevant_evidence_count = len([evidence for evidence in evidence_items if evidence.evidence_id in scene_plan_scene.source_evidence_ids])
-    response = generate_with_context_log(
-        llm_provider,
-        task_type="script_scene_validation",
-        prompt=_script_scene_validation_prompt(
-            scene_plan_scene,
-            script_scene,
-            content_blocks,
-            evidence_items,
-            style_profile,
-        ),
-        response_format="json",
-        db=db,
-        project_id=version.project_id,
-        step_type="script_scene_validation",
-        chunk_range={"scene_id": script_scene.scene_id},
-        source_item_count=relevant_evidence_count + len(content_blocks),
-        included_item_count=min(relevant_evidence_count, 80) + len(content_blocks),
-    )
-    payload = _validate_script_scene_validation_payload(_load_json_object(response.text))
+    issues = []
+    suggestions = []
+    scene_paragraph_ids = set(scene_plan_scene.source_paragraph_ids or [])
+    known_paragraph_ids = set(paragraphs_by_id)
+    if script_scene.scene_id != scene_plan_scene.scene_id:
+        issues.append("script scene_id does not match scene plan scene_id")
+    if script_scene.source_chapter_ids != scene_plan_scene.source_chapter_ids:
+        issues.append("script source_chapter_ids do not match scene plan")
+    if not content_blocks:
+        issues.append("scene has no content blocks")
+    covered_paragraph_ids: set[str] = set()
+    for block in content_blocks:
+        if block.block_type not in BLOCK_TYPES:
+            issues.append(f"{block.content_block_id} has invalid block type")
+        if not block.text or not block.text.strip():
+            issues.append(f"{block.content_block_id} has empty text")
+        if block.block_type == "dialogue" and (not block.speaker or not block.speaker.strip()):
+            issues.append(f"{block.content_block_id} dialogue block is missing speaker")
+        if block.block_type != "dialogue" and block.speaker is not None:
+            issues.append(f"{block.content_block_id} non-dialogue block should not have speaker")
+        if not block.source_paragraph_ids:
+            issues.append(f"{block.content_block_id} has no source_paragraph_ids")
+            continue
+        unknown = set(block.source_paragraph_ids) - known_paragraph_ids
+        if unknown:
+            issues.append(f"{block.content_block_id} references unknown paragraphs: {sorted(unknown)}")
+        outside_scene = set(block.source_paragraph_ids) - scene_paragraph_ids
+        if outside_scene:
+            issues.append(f"{block.content_block_id} references paragraphs outside scene plan: {sorted(outside_scene)}")
+        covered_paragraph_ids.update(block.source_paragraph_ids)
+    if scene_paragraph_ids and not covered_paragraph_ids:
+        suggestions.append("content blocks should cite at least one source paragraph from the scene plan")
+    payload = {
+        "passed": not issues,
+        "issues": issues,
+        "suggestions": suggestions,
+        "coverage": {
+            "source_paragraph_ids": sorted(covered_paragraph_ids),
+            "scene_source_paragraph_ids": sorted(scene_paragraph_ids),
+        },
+    }
     return ScriptSceneValidation(
         script_version_id=version.script_version_id,
         project_id=version.project_id,
@@ -442,37 +455,9 @@ def _build_script_scene_validation(
         issues=payload["issues"],
         suggestions=payload["suggestions"],
         coverage=payload["coverage"],
-        source=response.model_name,
+        source="deterministic",
         created_at=timestamp,
         updated_at=timestamp,
-    )
-
-
-def _script_scene_validation_prompt(
-    scene_plan_scene: ScenePlanScene,
-    script_scene: ScriptScene,
-    content_blocks: list[ScriptContentBlock],
-    evidence_items: list[EvidenceItem],
-    style_profile: StyleProfile | None,
-) -> str:
-    relevant_evidence = [evidence for evidence in evidence_items if evidence.evidence_id in scene_plan_scene.source_evidence_ids]
-    return (
-        "You are the Script Scene Validator. Validate one generated screenplay scene against its confirmed Scene Plan.\n"
-        "Return only one JSON object. No Markdown. No explanation.\n"
-        "JSON schema: {\"passed\":true,\"issues\":[],\"suggestions\":[],"
-        "\"coverage\":{\"must_cover_plot\":[],\"must_keep_dialogue\":[],"
-        "\"must_keep_visual_elements\":[],\"must_keep_foreshadowing\":[]}}\n"
-        "Validation checklist:\n"
-        "- Required plot beats are present in screenplay content blocks.\n"
-        "- Required dialogue, visual elements, and foreshadowing are preserved.\n"
-        "- Dialogue blocks have speakers, block types are valid, and evidence references are coherent.\n"
-        "- The scene reads as filmable screenplay content, not novel summary.\n"
-        "- Style follows the style profile.\n\n"
-        f"scene_plan_scene:\n{_scene_block(scene_plan_scene)}\n\n"
-        f"script_scene:\n{_script_scene_block(script_scene)}\n\n"
-        f"content_blocks:\n{_script_block(content_blocks)}\n\n"
-        f"relevant_evidence:\n{_evidence_block(relevant_evidence)}\n\n"
-        f"style_profile:\n{truncate_text(style_profile.profile_text, 3000) if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
     )
 
 
@@ -481,10 +466,9 @@ def _script_scene_repair_prompt(
     script_scene: ScriptScene,
     content_blocks: list[ScriptContentBlock],
     validation: ScriptSceneValidation,
-    evidence_items: list[EvidenceItem],
+    paragraphs: list[Paragraph],
     style_profile: StyleProfile | None,
 ) -> str:
-    relevant_evidence = [evidence for evidence in evidence_items if evidence.evidence_id in scene_plan_scene.source_evidence_ids]
     return (
         "You are the Script Scene Repair Worker. Repair exactly one generated screenplay scene according to validation issues.\n"
         "Return the full repaired scene as one JSON object. No Markdown. No explanation.\n"
@@ -499,7 +483,7 @@ def _script_scene_repair_prompt(
         f"scene_plan_scene:\n{_scene_block(scene_plan_scene)}\n\n"
         f"script_scene:\n{_script_scene_block(script_scene)}\n\n"
         f"content_blocks:\n{_script_block(content_blocks)}\n\n"
-        f"relevant_evidence:\n{_evidence_block(relevant_evidence)}\n\n"
+        f"source_paragraphs:\n{_paragraph_block(paragraphs)}\n\n"
         f"style_profile:\n{truncate_text(style_profile.profile_text, 3000) if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
     )
 
@@ -511,6 +495,7 @@ def _scene_block(scene: ScenePlanScene) -> str:
             "title": scene.title,
             "source_chapter_ids": scene.source_chapter_ids,
             "source_evidence_ids": scene.source_evidence_ids,
+            "source_paragraph_ids": scene.source_paragraph_ids,
             "interior_exterior": scene.interior_exterior,
             "location": scene.location,
             "time": scene.time,
@@ -551,6 +536,7 @@ def _script_block(content_blocks: list[ScriptContentBlock]) -> str:
                 "text": block.text,
                 "speaker": block.speaker,
                 "source_evidence_ids": block.source_evidence_ids,
+                "source_paragraph_ids": block.source_paragraph_ids,
             },
             ensure_ascii=False,
         )
@@ -558,40 +544,21 @@ def _script_block(content_blocks: list[ScriptContentBlock]) -> str:
     )
 
 
-def _evidence_block(evidence_items: list[EvidenceItem]) -> str:
-    ranked = rank_evidence_items(evidence_items)
+def _paragraph_block(paragraphs: list[Paragraph]) -> str:
     return compact_lines(
         (
         json.dumps(
             {
-                "evidence_id": evidence.evidence_id,
-                "chapter_id": evidence.chapter_id,
-                "paragraph_id": evidence.paragraph_id,
-                "quote": truncate_text(evidence.quote, 300, ""),
-                "explanation": truncate_text(evidence.explanation, 600),
-                "must_keep": evidence.must_keep,
+                "source_paragraph_id": paragraph.paragraph_id,
+                "chapter_id": paragraph.chapter_id,
+                "paragraph_id": paragraph.paragraph_id,
+                "text": truncate_text(paragraph.text, 700, ""),
             },
             ensure_ascii=False,
         )
-        for evidence in ranked
+        for paragraph in paragraphs
         ),
         6000,
-    )
-
-
-def _story_bible_block(story_bible: StoryBible | None) -> str:
-    if story_bible is None:
-        return "{}"
-    return json.dumps(
-        {
-            "title": story_bible.title,
-            "tone": story_bible.tone,
-            "main_characters": story_bible.main_characters,
-            "relationships": story_bible.relationships,
-            "locations": story_bible.locations,
-            "central_conflict": truncate_text(story_bible.central_conflict, 800),
-        },
-        ensure_ascii=False,
     )
 
 
@@ -634,17 +601,18 @@ def _latest_scene_validation(version: ScriptVersion, scene_id: str) -> ScriptSce
     return validations[0] if validations else None
 
 
-def _evidence_items(db: Session, project_id: str) -> list[EvidenceItem]:
-    return (
-        db.query(EvidenceItem)
-        .filter(EvidenceItem.project_id == project_id)
-        .order_by(EvidenceItem.evidence_id)
+def _paragraphs_by_id(db: Session, project_id: str) -> dict[str, Paragraph]:
+    paragraphs = (
+        db.query(Paragraph)
+        .filter(Paragraph.project_id == project_id)
+        .order_by(Paragraph.chapter_id, Paragraph.order)
         .all()
     )
+    return {paragraph.paragraph_id: paragraph for paragraph in paragraphs}
 
 
-def _story_bible(db: Session, project_id: str) -> StoryBible | None:
-    return db.query(StoryBible).filter(StoryBible.project_id == project_id).one_or_none()
+def _source_paragraphs_for_scene(scene: ScenePlanScene, paragraphs_by_id: dict[str, Paragraph]) -> list[Paragraph]:
+    return [paragraphs_by_id[paragraph_id] for paragraph_id in scene.source_paragraph_ids if paragraph_id in paragraphs_by_id]
 
 
 def _style_profile(db: Session, project_id: str) -> StyleProfile | None:
@@ -677,7 +645,7 @@ def _validate_script_scene_validation_payload(payload: dict) -> dict:
     return {"passed": passed, "issues": issues, "suggestions": suggestions, "coverage": coverage}
 
 
-def _validate_script_scene_payload(payload: dict, scene: ScenePlanScene, evidence_ids: set[str]) -> dict:
+def _validate_script_scene_payload(payload: dict, scene: ScenePlanScene, paragraph_ids: set[str]) -> dict:
     if payload.get("scene_id") != scene.scene_id:
         raise RuntimeError("script_generation scene_id must match scene plan")
     title = payload.get("title")
@@ -707,7 +675,8 @@ def _validate_script_scene_payload(payload: dict, scene: ScenePlanScene, evidenc
         block_type = block.get("type")
         text = block.get("text")
         speaker = block.get("speaker")
-        source_evidence_ids = block.get("source_evidence_ids")
+        source_paragraph_ids = block.get("source_paragraph_ids")
+        source_evidence_ids = block.get("source_evidence_ids", [])
         if not isinstance(content_block_id, str) or not content_block_id.strip():
             raise RuntimeError("script_generation content_block_id must be a non-empty string")
         if content_block_id in seen_block_ids:
@@ -722,11 +691,21 @@ def _validate_script_scene_payload(payload: dict, scene: ScenePlanScene, evidenc
             raise RuntimeError("script_generation non-dialogue block speaker must be null")
         if speaker is not None and not isinstance(speaker, str):
             raise RuntimeError("script_generation speaker must be null or a string")
+        if not isinstance(source_paragraph_ids, list):
+            raise RuntimeError("script_generation source_paragraph_ids must be a list")
+        if not source_paragraph_ids:
+            raise RuntimeError("script_generation source_paragraph_ids must be non-empty")
+        if any(not isinstance(paragraph_id, str) or not paragraph_id.strip() for paragraph_id in source_paragraph_ids):
+            raise RuntimeError("script_generation source_paragraph_ids must contain non-empty strings")
+        normalized_source_paragraph_ids = [paragraph_id.strip() for paragraph_id in source_paragraph_ids]
+        unknown_paragraphs = set(normalized_source_paragraph_ids) - paragraph_ids
+        if unknown_paragraphs:
+            raise RuntimeError(f"script_generation references unknown paragraphs: {sorted(unknown_paragraphs)}")
+        outside_scene = set(normalized_source_paragraph_ids) - set(scene.source_paragraph_ids or [])
+        if outside_scene:
+            raise RuntimeError(f"script_generation references paragraphs outside scene plan: {sorted(outside_scene)}")
         if not isinstance(source_evidence_ids, list):
             raise RuntimeError("script_generation source_evidence_ids must be a list")
-        unknown_evidence = set(source_evidence_ids) - evidence_ids
-        if unknown_evidence:
-            raise RuntimeError(f"script_generation references unknown evidence: {sorted(unknown_evidence)}")
         seen_block_ids.add(content_block_id)
         validated_blocks.append(
             {
@@ -735,7 +714,8 @@ def _validate_script_scene_payload(payload: dict, scene: ScenePlanScene, evidenc
                 "type": block_type,
                 "text": text.strip(),
                 "speaker": speaker.strip() if isinstance(speaker, str) else None,
-                "source_evidence_ids": source_evidence_ids,
+                "source_evidence_ids": [],
+                "source_paragraph_ids": normalized_source_paragraph_ids,
             }
         )
     return {
@@ -783,6 +763,7 @@ def _internal_script(version: ScriptVersion) -> dict:
                         "text": block.text,
                         "speaker": block.speaker,
                         "source_evidence_ids": block.source_evidence_ids,
+                        "source_paragraph_ids": block.source_paragraph_ids,
                     }
                     for block in blocks_by_scene.get(scene.scene_id, [])
                 ],
@@ -820,6 +801,7 @@ def _script_ui(version: ScriptVersion) -> dict:
                 "text": block.text,
                 "speaker": block.speaker,
                 "source_evidence_ids": block.source_evidence_ids,
+                "source_paragraph_ids": block.source_paragraph_ids,
             }
             for block in sorted(version.content_blocks, key=lambda item: (item.scene_id, item.order))
         ],

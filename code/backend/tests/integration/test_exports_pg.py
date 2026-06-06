@@ -4,12 +4,13 @@ from app.services.store import STORE
 
 
 def _prepare_script(client) -> str:
-    project = client.post("/projects", json={"name": "导出项目"}).json()
+    project = client.post("/projects", json={"name": "Export project"}).json()
     project_id = project["project_id"]
     upload = client.post(
         f"/projects/{project_id}/uploads",
-        files={"file": ("novel.md", "# 第一章 雨夜\n\n她回来了。\n\n门开了。")},
+        files={"file": ("novel.md", "# Chapter 1\n\nShe returns.\n\nThe door opens.")},
     )
+    assert upload.status_code == 200
     chapter_ids = [chapter["chapter_id"] for chapter in upload.json()["detected_chapters"]]
     assert client.post(f"/projects/{project_id}/chapters/confirm", json={"chapter_ids": chapter_ids}).status_code == 200
     assert client.post(f"/projects/{project_id}/style-source", json={"kind": "builtin", "builtin_style": "suspense"}).status_code == 200
@@ -82,6 +83,7 @@ def test_export_clean_json_produces_json_without_internal_fields(client):
     downloaded = client.get(created.json()["download_url"])
     assert downloaded.status_code == 200
     assert downloaded.headers["content-type"] == "application/json; charset=utf-8"
-    assert "雨夜归来" in downloaded.text
+    assert "Rainy Return" in downloaded.text
     assert "content_block_id" not in downloaded.text
     assert "source_evidence_ids" not in downloaded.text
+    assert "source_paragraph_ids" not in downloaded.text
