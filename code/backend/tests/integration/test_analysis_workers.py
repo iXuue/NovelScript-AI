@@ -74,7 +74,7 @@ def test_scene_plan_generation_persists_chapter_summaries_and_evidence_from_conf
         assert task_types.count("chapter_summary") == 2
         assert task_types.count("evidence_extraction") == 2
         assert [item.evidence_id for item in evidence_items] == ["EV001", "EV002"]
-        assert evidence_items[0].paragraph_id == "CH001_P001"
+        assert evidence_items[0].paragraph_ids == ["CH001_P001"]
         assert evidence_items[0].evidence_type == "关键事件"
         assert evidence_items[0].explanation == "主角归来推动剧情。"
         assert evidence_items[0].importance == 5

@@ -1,16 +1,17 @@
 services:
   postgres:
     image: postgres:16
+    command: ["postgres", "-c", "port=5433"]
     environment:
       POSTGRES_DB: novelscript
       POSTGRES_USER: novelscript
       POSTGRES_PASSWORD: novelscript
     ports:
-      - "5432:5432"
+      - "5433:5433"
     volumes:
       - novelscript_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U novelscript -d novelscript"]
+      test: ["CMD-SHELL", "pg_isready -U novelscript -d novelscript -p 5433"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,7 +20,7 @@ services:
     build:
       context: ./backend
     environment:
-      DATABASE_URL: "postgresql+psycopg://novelscript:novelscript@postgres:5432/novelscript"
+      DATABASE_URL: "postgresql+psycopg://novelscript:novelscript@postgres:5433/novelscript"
       STORAGE_ROOT: /app/storage
       LOCAL_DEVELOPER_LOGS_ENABLED: "true"
     ports:

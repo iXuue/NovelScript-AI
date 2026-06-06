@@ -25,7 +25,7 @@ export function AuthPane({
   const title = mode === "login" ? "登录工作室" : "注册账号";
   const actionLabel = mode === "login" ? "登录" : "注册并进入";
   const normalizedLoginId = loginId.trim();
-  const registerLoginIdValid = /^[A-Za-z0-9\u4e00-\u9fff]{2,32}$/.test(normalizedLoginId);
+  const registerLoginIdValid = /^[A-Za-z0-9_]{2,32}$/.test(normalizedLoginId);
   const registerPasswordValid = password.length >= 6 && password.length <= 128;
   const canSubmit =
     mode === "register"
@@ -91,7 +91,7 @@ export function AuthPane({
               autoComplete="username"
               autoFocus
               aria-label="账号"
-              placeholder={mode === "register" ? "中文、英文或数字" : "输入账号"}
+              placeholder={mode === "register" ? "字母、数字或下划线" : "输入账号"}
               value={loginId}
               onChange={(event) => setLoginId(event.target.value)}
             />
@@ -109,10 +109,13 @@ export function AuthPane({
               />
               <button
                 aria-label={passwordVisible ? "隐藏密码" : "显示密码"}
+                aria-pressed={passwordVisible}
+                className={passwordVisible ? "figma-password-eye visible" : "figma-password-eye"}
+                title={passwordVisible ? "隐藏密码" : "显示密码"}
                 type="button"
                 onClick={() => setPasswordVisible((value) => !value)}
               >
-                {passwordVisible ? "隐藏" : "显示"}
+                <span aria-hidden="true" />
               </button>
             </div>
           </label>

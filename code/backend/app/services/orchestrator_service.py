@@ -214,7 +214,7 @@ def generate_script(project_id: str, db=None, llm_provider: LLMProvider | None =
                 {
                     "source_evidence_id": evidence_id,
                     "chapter_id": scene["source_chapter_ids"][0],
-                    "paragraph_id": paragraph.paragraph_id if paragraph else f"{scene['source_chapter_ids'][0]}_P001",
+                    "paragraph_ids": [paragraph.paragraph_id if paragraph else f"{scene['source_chapter_ids'][0]}_P001"],
                     "text": text,
                 }
             ],

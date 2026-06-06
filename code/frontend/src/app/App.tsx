@@ -111,7 +111,7 @@ function displayError(err: unknown): string {
       return "账号已存在；请直接登录或换一个账号。";
     }
     if (err.code === "invalid_login_id") {
-      return "账号需为 2-32 位中文、英文或数字，不能包含空格或符号。";
+      return "账号需为 2-32 位字母、数字或下划线，不能包含中文、空格或其他符号。";
     }
     if (err.code === "invalid_password") {
       return "密码需为 6-128 位。";

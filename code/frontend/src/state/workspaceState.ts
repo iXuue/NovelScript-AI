@@ -118,7 +118,7 @@ ${yamlScenes}
           {
             source_evidence_id: block.source_evidence_ids[0],
             chapter_id: scenePlan.scenes[index].source_chapter_ids[0],
-            paragraph_id: `${scenePlan.scenes[index].source_chapter_ids[0]}_P001`,
+            paragraph_ids: [`${scenePlan.scenes[index].source_chapter_ids[0]}_P001`],
             text: index === 0 ? "主要角色准备采取行动。" : "关键线索被重新提出。"
           }
         ]

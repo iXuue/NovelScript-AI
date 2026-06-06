@@ -107,7 +107,7 @@ def test_evidence_prompt_contains_allowed_types_and_quote_rules():
     assert "证据类型只能使用" in prompt
     assert "关键事件" in prompt
     assert "quote 必须是原文摘录" in prompt
-    assert "不得引用不存在的 paragraph_id" in prompt
+    assert "不得引用不存在的 paragraph_ids" in prompt
     assert '"must_keep"' in prompt
 
 
@@ -141,6 +141,22 @@ def test_evidence_response_rejects_quote_not_found_in_source_paragraph():
 
     with pytest.raises(RuntimeError, match="quote"):
         _generate_evidence_payloads(FakeChapter(), [FakeParagraph("CH001_P001", "她回来了。")], provider)
+
+
+def test_evidence_response_accepts_multiple_paragraph_ids_for_one_evidence():
+    provider = StaticProvider(
+        '{"evidence":[{"paragraph_ids":["CH001_P001","CH001_P002"],"quote":"alpha\\nbeta",'
+        '"evidence_type":"\\u5173\\u952e\\u4e8b\\u4ef6","explanation":"note","related_characters":[],'
+        '"related_locations":[],"related_plot_points":[],"importance":3,"must_keep":true}]}'
+    )
+
+    payloads = _generate_evidence_payloads(
+        FakeChapter(),
+        [FakeParagraph("CH001_P001", "alpha"), FakeParagraph("CH001_P002", "beta")],
+        provider,
+    )
+
+    assert payloads[0]["paragraph_ids"] == ["CH001_P001", "CH001_P002"]
 
 
 def test_analysis_payload_generation_runs_summary_and_evidence_for_each_chapter_concurrently():

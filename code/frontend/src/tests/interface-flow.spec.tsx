@@ -170,7 +170,7 @@ test("App triggers scene plan generation, confirmation, script generation, and e
             {
               source_evidence_id: "EV001",
               chapter_id: "CH001",
-              paragraph_id: "CH001_P001",
+              paragraph_ids: ["CH001_P001"],
               text: "original evidence line"
             }
           ]

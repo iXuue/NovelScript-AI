@@ -233,7 +233,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+psycopg://novelscript:novelscript@postgres:5432/novelscript"
+    database_url: str = "postgresql+psycopg://novelscript:novelscript@postgres:5433/novelscript"
     file_storage_root: str = "/var/lib/novelscript/files"
     developer_runs_root: str = "/var/lib/novelscript/developer_runs"
     local_developer_logs_enabled: bool = True
@@ -295,18 +295,19 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 services:
   postgres:
     image: postgres:16
+    command: ["postgres", "-c", "port=5433"]
     environment:
       POSTGRES_DB: novelscript
       POSTGRES_USER: novelscript
       POSTGRES_PASSWORD: novelscript
     ports:
-      - "5432:5432"
+      - "5433:5433"
     volumes:
       - postgres_data:/var/lib/postgresql/data
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://novelscript:novelscript@postgres:5432/novelscript
+      DATABASE_URL: postgresql+psycopg://novelscript:novelscript@postgres:5433/novelscript
     depends_on:
       - postgres
     ports:

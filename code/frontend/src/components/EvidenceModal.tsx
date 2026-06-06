@@ -49,7 +49,7 @@ export function EvidenceModal({ projectId, contentBlockId, fallback, onClose }: 
         {result?.evidence.map((item) => (
           <article className="evidence-item" key={item.source_evidence_id}>
             <div className="evidence-meta">
-              {item.chapter_id} / {item.paragraph_id}
+              {item.chapter_id} / {item.paragraph_ids.join(", ")}
             </div>
             <p>{item.text}</p>
           </article>

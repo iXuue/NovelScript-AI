@@ -2296,24 +2296,70 @@ select:disabled {
 }
 
 .figma-auth-password {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  position: relative;
+  width: 100%;
 }
 
-.figma-auth-password button {
-  background: rgba(255, 230, 221, 0.2);
-  border: 1px solid rgba(255, 250, 247, 0.3);
-  border-radius: var(--studio-radius);
+.figma-auth-password input {
+  padding-right: 46px;
+}
+
+.figma-password-eye {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
   color: #6b3f36;
-  font-size: 13px;
-  font-weight: 720;
-  min-height: 44px;
-  padding: 0 12px;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
 }
 
-.figma-auth-password button:hover:not(:disabled) {
-  background: rgba(255, 215, 205, 0.86);
+.figma-password-eye:hover:not(:disabled) {
+  background: rgba(255, 215, 205, 0.42);
+}
+
+.figma-password-eye span {
+  border: 1.8px solid currentColor;
+  border-radius: 999px / 720px;
+  display: block;
+  height: 13px;
+  position: relative;
+  width: 20px;
+}
+
+.figma-password-eye span::before,
+.figma-password-eye span::after {
+  content: "";
+  position: absolute;
+}
+
+.figma-password-eye span::before {
+  background: currentColor;
+  border-radius: 50%;
+  height: 5px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 5px;
+}
+
+.figma-password-eye:not(.visible) span::after {
+  background: currentColor;
+  border-radius: 999px;
+  height: 2px;
+  left: 1px;
+  top: 5px;
+  transform: rotate(-36deg);
+  transform-origin: center;
+  width: 19px;
 }
 
 .figma-auth-error {

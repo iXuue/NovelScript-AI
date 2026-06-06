@@ -92,13 +92,16 @@ def generate_evidence_index(
     for chapter, paragraphs, payloads in payloads_by_chapter:
         valid_paragraph_ids = {paragraph.paragraph_id for paragraph in paragraphs}
         for payload in payloads:
-            if payload["paragraph_id"] not in valid_paragraph_ids:
-                raise RuntimeError(f"Evidence item references unknown paragraph_id: {payload['paragraph_id']}")
+            paragraph_ids = payload["paragraph_ids"]
+            unknown_paragraph_ids = set(paragraph_ids) - valid_paragraph_ids
+            if unknown_paragraph_ids:
+                raise RuntimeError(f"Evidence item references unknown paragraph_ids: {sorted(unknown_paragraph_ids)}")
             evidence = EvidenceItem(
                 project_id=project_id,
                 evidence_id=f"EV{counter:03d}",
                 chapter_id=chapter.chapter_id,
-                paragraph_id=payload["paragraph_id"],
+                paragraph_id=paragraph_ids[0],
+                paragraph_ids=paragraph_ids,
                 quote=payload["quote"],
                 evidence_type=payload["evidence_type"],
                 explanation=payload["explanation"],
@@ -284,13 +287,16 @@ def _persist_evidence_items(
     for chapter, paragraphs, payloads in payloads_by_chapter:
         valid_paragraph_ids = {paragraph.paragraph_id for paragraph in paragraphs}
         for payload in payloads:
-            if payload["paragraph_id"] not in valid_paragraph_ids:
-                raise RuntimeError(f"Evidence item references unknown paragraph_id: {payload['paragraph_id']}")
+            paragraph_ids = payload["paragraph_ids"]
+            unknown_paragraph_ids = set(paragraph_ids) - valid_paragraph_ids
+            if unknown_paragraph_ids:
+                raise RuntimeError(f"Evidence item references unknown paragraph_ids: {sorted(unknown_paragraph_ids)}")
             evidence = EvidenceItem(
                 project_id=project_id,
                 evidence_id=f"EV{counter:03d}",
                 chapter_id=chapter.chapter_id,
-                paragraph_id=payload["paragraph_id"],
+                paragraph_id=paragraph_ids[0],
+                paragraph_ids=paragraph_ids,
                 quote=payload["quote"],
                 evidence_type=payload["evidence_type"],
                 explanation=payload["explanation"],
@@ -419,7 +425,7 @@ def _generate_evidence_payloads(
     if llm_provider is None:
         return [
             {
-                "paragraph_id": paragraph.paragraph_id,
+                "paragraph_ids": [paragraph.paragraph_id],
                 "quote": paragraph.text,
                 "evidence_type": _classify_evidence_type(paragraph.text),
                 "explanation": f"来自{chapter.title}的原文素材，可作为后续改编依据。",
@@ -503,17 +509,17 @@ def _parse_evidence_payloads(text: str, source: str, paragraphs: list[Paragraph]
     for item in evidence:
         if not isinstance(item, dict):
             raise RuntimeError("evidence_extraction evidence items must be JSON objects")
-        paragraph_id = _required_text(item, "paragraph_id", "evidence_extraction")
+        paragraph_ids = _paragraph_ids_from_item(item)
         quote = truncate_text(_required_text(item, "quote", "evidence_extraction"), DEFAULT_MAX_QUOTE_CHARS, "")
         evidence_type = _required_text(item, "evidence_type", "evidence_extraction")
         if evidence_type not in ALLOWED_EVIDENCE_TYPES:
             raise RuntimeError(f"evidence_type must be one of {sorted(ALLOWED_EVIDENCE_TYPES)}")
-        source_text = paragraph_text_by_id.get(paragraph_id)
+        source_text = _joined_source_text(paragraph_ids, paragraph_text_by_id)
         if source_text is None:
             source_text = _best_match_source(quote, paragraph_text_by_id)
             if source_text is None:
-                raise RuntimeError(f"Evidence item references unknown paragraph_id: {paragraph_id}")
-            paragraph_id = source_text[0]
+                raise RuntimeError(f"Evidence item references unknown paragraph_ids: {paragraph_ids}")
+            paragraph_ids = [source_text[0]]
             source_text = source_text[1]
         if _fuzzy_match(quote, source_text) < 0.5:
             raise RuntimeError("quote must match the referenced paragraph text")
@@ -524,7 +530,7 @@ def _parse_evidence_payloads(text: str, source: str, paragraphs: list[Paragraph]
             raise RuntimeError("must_keep must be a boolean")
         payloads.append(
             {
-                "paragraph_id": paragraph_id,
+                "paragraph_ids": paragraph_ids,
                 "quote": quote,
                 "evidence_type": evidence_type,
                 "explanation": _required_text(item, "explanation", "evidence_extraction"),
@@ -537,6 +543,30 @@ def _parse_evidence_payloads(text: str, source: str, paragraphs: list[Paragraph]
             }
         )
     return payloads
+
+
+def _paragraph_ids_from_item(item: dict) -> list[str]:
+    paragraph_ids = item.get("paragraph_ids")
+    if paragraph_ids is None and item.get("paragraph_id") is not None:
+        paragraph_ids = [item["paragraph_id"]]
+    if not isinstance(paragraph_ids, list) or not paragraph_ids:
+        raise RuntimeError("evidence_extraction response field paragraph_ids must be a non-empty list")
+    cleaned = []
+    for paragraph_id in paragraph_ids:
+        if not isinstance(paragraph_id, str) or not paragraph_id.strip():
+            raise RuntimeError("evidence_extraction paragraph_ids must contain non-empty strings")
+        cleaned.append(paragraph_id.strip())
+    return cleaned
+
+
+def _joined_source_text(paragraph_ids: list[str], paragraph_text_by_id: dict[str, str]) -> str | None:
+    texts = []
+    for paragraph_id in paragraph_ids:
+        text = paragraph_text_by_id.get(paragraph_id)
+        if text is None:
+            return None
+        texts.append(text)
+    return "\n".join(texts)
 
 
 def _chapter_summary_prompt(chapter: Chapter, paragraphs: list[Paragraph]) -> str:
@@ -564,7 +594,7 @@ def _chapter_summary_prompt(chapter: Chapter, paragraphs: list[Paragraph]) -> st
 def _evidence_prompt(chapter: Chapter, paragraphs: list[Paragraph]) -> str:
     return (
         "你是 Evidence Extraction Worker。请从已确认小说章节中提取可支撑改编的原文证据索引。\n"
-        "硬性规则：每条证据必须引用已有 paragraph_id；不得引用不存在的 paragraph_id；"
+        "硬性规则：每条证据必须引用已有 paragraph_ids 数组；不得引用不存在的 paragraph_ids；"
         "quote 必须是原文摘录，不能改写、概括或补写；不确定时少提取，不要编造。\n"
         "证据类型只能使用：关键事件、对白、人物目标、人物关系、心理描写、视觉元素、线索、伏笔、冲突、地点描写。\n"
         "importance 必须是 1 到 5 的整数；must_keep 必须是 boolean。\n"
@@ -573,7 +603,7 @@ def _evidence_prompt(chapter: Chapter, paragraphs: list[Paragraph]) -> str:
         "{\n"
         '  "evidence": [\n'
         "    {\n"
-        '      "paragraph_id": "CH001_P001",\n'
+        '      "paragraph_ids": ["CH001_P001"],\n'
         '      "quote": "原文摘录",\n'
         '      "evidence_type": "关键事件",\n'
         '      "explanation": "这条证据为什么重要",\n'

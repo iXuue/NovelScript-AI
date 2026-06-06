@@ -16,7 +16,7 @@ from app.services.store import now_utc
 
 PASSWORD_ITERATIONS = 200_000
 SESSION_TTL_DAYS = 30
-LOGIN_ID_PATTERN = re.compile(r"^[a-z0-9\u4e00-\u9fff]{2,32}$")
+LOGIN_ID_PATTERN = re.compile(r"^[a-z0-9_]{2,32}$")
 
 
 class DuplicateLoginIdError(Exception):
@@ -42,7 +42,7 @@ def normalize_login_id(login_id: str) -> str:
 def validate_register_login_id(login_id: str) -> str:
     normalized = normalize_login_id(login_id)
     if not LOGIN_ID_PATTERN.fullmatch(normalized):
-        raise InvalidLoginIdError("login_id must be 2-32 Chinese, English, or numeric characters")
+        raise InvalidLoginIdError("login_id must be 2-32 letters, digits, or underscores")
     return normalized
 
 

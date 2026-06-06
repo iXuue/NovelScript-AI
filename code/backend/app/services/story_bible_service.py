@@ -106,7 +106,7 @@ def _evidence_block(evidence_items: list[EvidenceItem]) -> str:
                 {
                     "evidence_id": evidence.evidence_id,
                     "chapter_id": evidence.chapter_id,
-                    "paragraph_id": evidence.paragraph_id,
+                    "paragraph_ids": evidence.paragraph_ids or ([evidence.paragraph_id] if evidence.paragraph_id else []),
                     "quote": truncate_text(evidence.quote, 300, ""),
                     "evidence_type": evidence.evidence_type,
                     "explanation": evidence.explanation,

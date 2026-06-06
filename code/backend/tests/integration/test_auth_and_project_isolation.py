@@ -41,19 +41,22 @@ def test_duplicate_login_and_wrong_password_return_errors(unauth_client):
     assert wrong_password.json()["error"]["code"] == "invalid_credentials"
 
 
-def test_register_accepts_chinese_english_digits_and_rejects_symbols(unauth_client):
-    registered = _register(unauth_client, "作者123")
-    assert registered["user"]["login_id"] == "作者123"
+def test_register_accepts_letters_digits_underscore_and_rejects_other_characters(unauth_client):
+    registered = _register(unauth_client, "Author_23")
+    assert registered["user"]["login_id"] == "author_23"
     assert registered["user"]["user_id"] != registered["user"]["login_id"]
 
-    invalid_login = unauth_client.post("/auth/register", json={"login_id": "author-a", "password": "password123"})
-    assert invalid_login.status_code == 400
-    assert invalid_login.json()["error"]["code"] == "invalid_login_id"
+    invalid_chinese = unauth_client.post("/auth/register", json={"login_id": "作者23", "password": "password123"})
+    assert invalid_chinese.status_code == 400
+    assert invalid_chinese.json()["error"]["code"] == "invalid_login_id"
+
+    invalid_symbol = unauth_client.post("/auth/register", json={"login_id": "author-a", "password": "password123"})
+    assert invalid_symbol.status_code == 400
+    assert invalid_symbol.json()["error"]["code"] == "invalid_login_id"
 
     invalid_password = unauth_client.post("/auth/register", json={"login_id": "author2", "password": "12345"})
     assert invalid_password.status_code == 400
     assert invalid_password.json()["error"]["code"] == "invalid_password"
-
 
 def test_logout_revokes_current_token(unauth_client):
     registered = _register(unauth_client, "logoutuser")

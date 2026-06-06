@@ -144,7 +144,7 @@ export type EvidenceLookupResult = {
   evidence: Array<{
     source_evidence_id: string;
     chapter_id: string;
-    paragraph_id: string;
+    paragraph_ids: string[];
     text: string;
   }>;
 };
