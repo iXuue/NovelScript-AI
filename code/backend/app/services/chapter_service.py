@@ -50,7 +50,14 @@ NATURAL_SORT_RE = re.compile(r"(\d+)")
 
 
 def split_paragraphs(text: str) -> list[str]:
-    return [p.strip() for p in re.split(r"\n\s*\n+", text.strip()) if p.strip()]
+    text = text.strip()
+    if not text:
+        return []
+    # 先尝试按空行分隔
+    if "\n\n" in text:
+        return [p.strip() for p in re.split(r"\n\s*\n+", text) if p.strip()]
+    # 没有空行时，每行作为一个段落
+    return [line.strip() for line in text.splitlines() if line.strip()]
 
 
 def natural_sort_key(value: str) -> list[int | str]:
