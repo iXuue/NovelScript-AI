@@ -23,18 +23,17 @@ export function EvidenceModal({ projectId, contentBlockId, fallback, onClose }: 
         }
       })
       .catch((err: Error) => {
-        if (mounted) {
-          if (fallback) {
-            setResult(fallback);
-          } else {
-            setError(err.message);
-          }
+        if (!mounted) return;
+        if (fallback) {
+          setResult(fallback);
+        } else {
+          setError(err.message);
         }
       });
     return () => {
       mounted = false;
     };
-  }, [contentBlockId, projectId]);
+  }, [contentBlockId, fallback, projectId]);
 
   return (
     <div className="modal-scrim" role="presentation">

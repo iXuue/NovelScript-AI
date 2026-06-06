@@ -52,19 +52,36 @@ export type ScenePlan = {
   scene_plan_id: string;
   status: ArtifactStatus;
   confirmed: boolean;
-  scenes: Array<{
-    scene_id: string;
-    order: number;
-    title: string;
-    source_chapter_ids: string[];
-    source_evidence_ids: string[];
-    location?: string;
-    time?: string;
-    characters: string[];
-    scene_function: string;
-    core_conflict: string;
-    adaptation_note: string;
-  }>;
+  validation?: ScenePlanValidation | null;
+  scenes: Array<ScenePlanScene>;
+};
+
+export type ScenePlanValidation = {
+  passed: boolean;
+  issues: Array<{ code?: string; message: string }>;
+  suggestions: string[];
+  coverage: Record<string, string[]>;
+  source: string;
+  created_at: string;
+};
+
+export type ScenePlanScene = {
+  scene_id: string;
+  order: number;
+  title: string;
+  source_chapter_ids: string[];
+  source_evidence_ids: string[];
+  interior_exterior: string;
+  location: string;
+  time: string;
+  characters: string[];
+  must_cover_plot: string[];
+  must_keep_dialogue: string[];
+  must_keep_visual_elements: string[];
+  must_keep_foreshadowing: string[];
+  scene_function: string;
+  core_conflict: string;
+  adaptation_note: string;
 };
 
 export type ScriptPreview = {
@@ -78,13 +95,36 @@ export type ScriptCurrentForUi = {
   script_version_id: string;
   status: ArtifactStatus;
   generated_at: string;
-  content_blocks: Array<{
-    content_block_id: string;
+  scenes: Array<{
     scene_id: string;
-    block_type: string;
-    display_label: string;
-    source_evidence_ids: string[];
+    title: string;
+    source_chapter_ids: string[];
+    scene_info: string;
+    characters: string[];
+    scene_purpose: string;
+    core_conflict: string;
+    validation?: ScriptSceneValidation | null;
   }>;
+  content_blocks: Array<ScriptContentBlock>;
+};
+
+export type ScriptSceneValidation = {
+  passed: boolean;
+  issues: Array<{ code?: string; message: string }>;
+  suggestions: string[];
+  coverage: Record<string, string[]>;
+  source: string;
+  created_at: string;
+};
+
+export type ScriptContentBlock = {
+  content_block_id: string;
+  scene_id: string;
+  block_type: string;
+  display_label: string;
+  text?: string;
+  speaker?: string | null;
+  source_evidence_ids: string[];
 };
 
 export type EvidenceLookupResult = {
@@ -111,6 +151,7 @@ export type ExportResult = {
   export_id: string;
   format: string;
   status: string;
+  filename?: string;
   download_url: string;
 };
 

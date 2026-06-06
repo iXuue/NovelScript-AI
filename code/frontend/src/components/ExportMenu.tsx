@@ -13,7 +13,7 @@ const formats: Array<{ value: ExportFormat; label: string }> = [
   { value: "docx", label: "DOCX" },
   { value: "pdf", label: "PDF" },
   { value: "txt", label: "TXT" },
-  { value: "clean_json", label: "干净 JSON" }
+  { value: "clean_json", label: "Clean JSON" },
 ];
 
 export function ExportMenu({ disabled, loading, latestExport, onExport }: Props) {
@@ -41,4 +41,3 @@ export function ExportMenu({ disabled, loading, latestExport, onExport }: Props)
     </div>
   );
 }
-

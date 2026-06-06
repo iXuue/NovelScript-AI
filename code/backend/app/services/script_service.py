@@ -75,14 +75,14 @@ def generate_script_from_confirmed_scene_plan(db: Session, project_id: str, llm_
 
 
 def get_current_script_for_ui(db: Session, project_id: str) -> dict | None:
-    version = _current_script_version(db, project_id)
+    version = _current_script_version(db, project_id) or _latest_script_version(db, project_id)
     if version is None:
         return None
     return _script_ui(version)
 
 
 def get_current_yaml_preview(db: Session, project_id: str) -> dict | None:
-    version = _current_script_version(db, project_id)
+    version = _current_script_version(db, project_id) or _latest_script_version(db, project_id)
     if version is None:
         return None
     return _yaml_preview(version)

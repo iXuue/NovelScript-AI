@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  ApiRequestError,
   confirmChapters,
   confirmScenePlan,
   createExport,
@@ -9,11 +10,14 @@ import {
   generateScript,
   getActiveRun,
   getCurrentScriptForUi,
+  getExportDownloadUrl,
   getPrimaryMessages,
   getScenePlan,
   getStyleSource,
   getYamlPreview,
   listProjects,
+  repairScenePlan,
+  repairScriptScene,
   sendMessage,
   setStyleSource,
   uploadNovel,
@@ -54,6 +58,10 @@ type AppProps = {
 
 function updateProject(project: ProjectSummary, patch: Partial<ProjectSummary>): ProjectSummary {
   return { ...project, ...patch, updated_at: nowIso() };
+}
+
+function isApiErrorCode(error: unknown, code: string): boolean {
+  return error instanceof ApiRequestError && error.code === code;
 }
 
 export default function App({ initialYaml }: AppProps) {
@@ -346,7 +354,14 @@ export default function App({ initialYaml }: AppProps) {
           setScenePlanConfirmed(true);
           setActiveProjectPatch({ stage: "scene_plan_confirmed" });
           return;
-        } catch {
+        } catch (err) {
+          if (isApiErrorCode(err, "scene_plan_validation_failed")) {
+            const current = await getScenePlan(activeProject.project_id).catch(() => scenePlan);
+            setScenePlan(current);
+            setScenePlanConfirmed(false);
+            setError("场景规划校验未通过，请先修复后再确认。");
+            return;
+          }
           setMode("demo");
         }
       }
@@ -370,7 +385,17 @@ export default function App({ initialYaml }: AppProps) {
           setActiveProjectPatch({ stage: "script_ready" });
           setViewMode("script");
           return;
-        } catch {
+        } catch (err) {
+          if (isApiErrorCode(err, "script_scene_validation_failed")) {
+            const ui = await getCurrentScriptForUi(activeProject.project_id).catch(() => null);
+            const preview = await getYamlPreview(activeProject.project_id).catch(() => null);
+            if (ui) setScriptForUi(ui);
+            if (preview) setScriptPreview(preview);
+            setActiveProjectPatch({ stage: "script_generating" });
+            setViewMode("script");
+            setError("剧本场景校验未通过，请修复失败场景后继续。");
+            return;
+          }
           setMode("demo");
         }
       }
@@ -397,6 +422,7 @@ export default function App({ initialYaml }: AppProps) {
         try {
           const exported = await createExport(activeProject.project_id, format);
           setLatestExport(exported);
+          window.open(getExportDownloadUrl(exported.download_url), "_blank", "noopener,noreferrer");
           return;
         } catch {
           setMode("demo");
@@ -408,6 +434,60 @@ export default function App({ initialYaml }: AppProps) {
         status: "succeeded",
         download_url: "#"
       });
+    });
+  }
+
+  function handleRepairScenePlan() {
+    if (!activeProject) return;
+    void runAction("正在修复场景规划", async () => {
+      if (mode === "live") {
+        try {
+          const repaired = await repairScenePlan(activeProject.project_id);
+          setScenePlan(repaired);
+          setScenePlanConfirmed(repaired.confirmed);
+          setActiveProjectPatch({ stage: "scene_plan_draft" });
+          setViewMode("scene-plan");
+          return;
+        } catch (err) {
+          if (isApiErrorCode(err, "repair_attempts_exceeded")) {
+            setError("修复次数已达到上限，请人工调整需求后重新生成。");
+            return;
+          }
+          if (isApiErrorCode(err, "scene_plan_repair_not_required")) {
+            setError("当前场景规划不需要修复。");
+            return;
+          }
+          setMode("demo");
+        }
+      }
+    });
+  }
+
+  function handleRepairScriptScene(sceneId: string) {
+    if (!activeProject) return;
+    void runAction("正在修复剧本场景", async () => {
+      if (mode === "live") {
+        try {
+          await repairScriptScene(activeProject.project_id, sceneId);
+          const ui = await getCurrentScriptForUi(activeProject.project_id);
+          const preview = await getYamlPreview(activeProject.project_id);
+          setScriptForUi(ui);
+          setScriptPreview(preview);
+          setActiveProjectPatch({ stage: ui.status === "current" ? "script_ready" : "script_generating" });
+          setViewMode("script");
+          return;
+        } catch (err) {
+          if (isApiErrorCode(err, "repair_attempts_exceeded")) {
+            setError("该场修复次数已达到上限，请人工调整后重新生成。");
+            return;
+          }
+          if (isApiErrorCode(err, "script_scene_repair_not_required")) {
+            setError("当前场景不需要修复。");
+            return;
+          }
+          setMode("demo");
+        }
+      }
     });
   }
 
@@ -513,6 +593,8 @@ export default function App({ initialYaml }: AppProps) {
           yaml={scriptPreview?.yaml ?? null}
           onConfirmScenePlan={handleConfirmScenePlan}
           onExport={handleExport}
+          onRepairScenePlan={handleRepairScenePlan}
+          onRepairScriptScene={handleRepairScriptScene}
         />
       </div>
     </div>
