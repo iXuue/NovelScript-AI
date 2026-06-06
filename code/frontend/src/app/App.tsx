@@ -642,6 +642,8 @@ export default function App({ initialYaml }: AppProps) {
   const hasNovelUpload =
     Boolean(activeProject) &&
     (chapters.length > 0 || Boolean(uploadedNovelName) || Boolean(activeProject && HAS_UPLOAD_STAGES.has(activeProject.stage)));
+  const canGenerateScenePlan = chaptersConfirmed && Boolean(styleSourceValue) && !scenePlan;
+  const canGenerateScript = Boolean(scenePlan && scenePlanConfirmed && !scriptPreview);
   const statusText = useMemo(() => {
     if (!activeProject) return "等待项目创建";
     if (!hasNovelUpload) return "正在等待用户上传";
@@ -715,6 +717,8 @@ export default function App({ initialYaml }: AppProps) {
         {activeProject ? (
           <ConversationPane
             activeLabel={loadingLabel}
+            canGenerateScenePlan={canGenerateScenePlan}
+            canGenerateScript={canGenerateScript}
             chapters={chapters}
             chaptersConfirmed={chaptersConfirmed}
             error={error}
@@ -729,6 +733,8 @@ export default function App({ initialYaml }: AppProps) {
             styleLocked={styleLocked}
             uploadedNovelName={uploadedNovelName}
             onConfirmChapters={handleConfirmChapters}
+            onGenerateScenePlan={handleGenerateScenePlan}
+            onGenerateScript={handleGenerateScript}
             onNovelSelected={handleNovelSelected}
             onStyleChange={handleStyleSourceChange}
             onStyleReferenceSelected={handleStyleReferenceSelected}

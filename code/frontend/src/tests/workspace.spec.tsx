@@ -129,6 +129,70 @@ test("custom style text disables reference script upload", async () => {
   expect(screen.getByLabelText("上传历史剧本参考")).toBeDisabled();
 });
 
+test("confirming chapters reveals the scene plan generation action when style is selected", async () => {
+  let confirmCalled = false;
+  const project = {
+    project_id: "proj_ready",
+    user_id: "user_workspace",
+    name: "待生成项目",
+    stage: "chapters_pending",
+    primary_conversation_id: "conv_ready",
+    active_session_id: "sess_ready",
+    created_at: "2026-06-06T00:00:00Z",
+    updated_at: "2026-06-06T00:00:00Z"
+  };
+
+  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "workspace-token");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const path = url.pathname;
+
+      if (method === "GET" && path === "/auth/me") {
+        return jsonResponse({ user_id: "user_workspace", login_id: "workspace", created_at: "2026-06-06T00:00:00Z" });
+      }
+      if (method === "GET" && path === "/projects") return jsonResponse([project]);
+      if (method === "GET" && path === "/projects/proj_ready/conversations/primary/messages") {
+        return jsonResponse({ conversation_id: "conv_ready", messages: [] });
+      }
+      if (method === "GET" && path === "/projects/proj_ready/style-source") {
+        return jsonResponse({
+          project_id: "proj_ready",
+          style_source: { kind: "builtin", builtin_style: "suspense" },
+          style_locked: false
+        });
+      }
+      if (method === "GET" && path === "/projects/proj_ready/chapters/pending") {
+        return jsonResponse({ chapters: [{ chapter_id: "CH001", order: 1, title: "第一章", paragraph_count: 2 }] });
+      }
+      if (method === "POST" && path === "/projects/proj_ready/chapters/confirm") {
+        confirmCalled = true;
+        return jsonResponse({ project_id: "proj_ready", stage: "chapters_confirmed", checkpoint_id: "chk_ready" });
+      }
+      if (method === "GET" && path === "/projects/proj_ready/scene-plan") {
+        return jsonResponse({ error: { code: "scene_plan_not_found", message: "Scene Plan not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_ready/scripts/current/yaml-preview") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_ready/scripts/current") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_ready/runs/active") return jsonResponse(null);
+
+      return jsonResponse({ error: { code: "not_mocked", message: `${method} ${path}`, details: {} } }, 500);
+    })
+  );
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "确认章节" }));
+
+  await screen.findByRole("button", { name: "开始生成 Scene Plan" });
+  expect(confirmCalled).toBe(true);
+});
+
 test("login stores token and opens workspace", async () => {
   vi.stubGlobal(
     "fetch",
