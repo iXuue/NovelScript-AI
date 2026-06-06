@@ -3,6 +3,7 @@ from pydantic import TypeAdapter, ValidationError
 from app.domain.artifacts import ProjectStage
 from app.domain.style import StyleSource
 from app.models.style import StyleReferenceFile, StyleSourceRecord
+from app.services.local_snapshot_service import mirror_project_snapshot
 from app.services.project_service import update_project_stage
 from app.services.store import STORE, now_utc, persistent_id
 
@@ -48,6 +49,7 @@ def set_style_source(project_id: str, data: dict, db=None) -> dict:
             record.reference_file_ids = source_dict.get("reference_file_ids") or []
             record.updated_at = timestamp
         db.commit()
+        mirror_project_snapshot(db, project_id)
     update_project_stage(project_id, ProjectStage.style_selected)
     return {
         "project_id": project_id,
@@ -84,6 +86,7 @@ def clear_style_source(project_id: str, db=None) -> None:
         if record is not None:
             db.delete(record)
             db.commit()
+        mirror_project_snapshot(db, project_id)
 
 
 def upload_style_reference(project_id: str, filename: str, markdown: str = "", db=None) -> dict:
@@ -110,6 +113,7 @@ def upload_style_reference(project_id: str, filename: str, markdown: str = "", d
             )
         )
         db.commit()
+        mirror_project_snapshot(db, project_id)
     return payload
 
 

@@ -24,6 +24,10 @@ _engine = None
 SessionLocal = sessionmaker(autoflush=False, autocommit=False)
 
 
+def using_local_storage() -> bool:
+    return False
+
+
 def get_engine():
     global _engine
     if _engine is None:
@@ -32,7 +36,10 @@ def get_engine():
     return _engine
 
 
-def get_db() -> Generator[Session, None, None]:
+def get_db() -> Generator[Session | None, None, None]:
+    if using_local_storage():
+        yield None
+        return
     get_engine()
     with SessionLocal() as session:
         yield session

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import api_error
 from app.core.database import get_db
+from app.services.local_snapshot_service import mirror_project_snapshot
 from app.services.project_service import create_project, get_project, list_projects
 
 router = APIRouter()
@@ -15,7 +16,9 @@ class CreateProjectRequest(BaseModel):
 
 @router.post("/projects")
 def create_project_endpoint(payload: CreateProjectRequest, db: Session = Depends(get_db)):
-    return create_project(db, name=payload.name)
+    project = create_project(db, name=payload.name)
+    mirror_project_snapshot(db, project["project_id"])
+    return project
 
 
 @router.get("/projects")

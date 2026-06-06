@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import api_error
 from app.core.database import get_db
+from app.services.local_snapshot_service import mirror_project_snapshot
 from app.services.llm_provider import LLMProvider, get_llm_provider
 from app.services.orchestrator_service import confirm_scene_plan, generate_scene_plan
 from app.services.project_service import require_project
@@ -46,7 +47,9 @@ def get_scene_plan_endpoint(project_id: str, db: Session = Depends(get_db)):
 def confirm_scene_plan_endpoint(project_id: str, payload: ConfirmScenePlanRequest, db: Session = Depends(get_db)):
     try:
         require_project(project_id)
-        return confirm_scene_plan(project_id, payload.confirmation_source, payload.message_id, db)
+        result = confirm_scene_plan(project_id, payload.confirmation_source, payload.message_id, db)
+        mirror_project_snapshot(db, project_id)
+        return result
     except KeyError:
         raise api_error(404, "scene_plan_not_found", "Scene Plan not found")
     except PermissionError:
@@ -61,7 +64,9 @@ def repair_scene_plan_endpoint(
 ):
     try:
         require_project(project_id)
-        return repair_current_scene_plan(db, project_id, llm_provider)
+        result = repair_current_scene_plan(db, project_id, llm_provider)
+        mirror_project_snapshot(db, project_id)
+        return result
     except KeyError:
         raise api_error(404, "scene_plan_not_found", "Scene Plan not found")
     except PermissionError as exc:

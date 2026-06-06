@@ -5,6 +5,7 @@ from app.models.chapter import Chapter
 from app.services.analysis_worker_service import run_initial_text_analysis
 from app.services.chapter_service import Paragraph
 from app.services.export_service import to_yaml_preview
+from app.services.local_snapshot_service import mirror_project_snapshot
 from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage
 from app.services.run_service import create_project_run, update_run_status, update_run_step
@@ -53,20 +54,24 @@ def generate_scene_plan(project_id: str, db=None, llm_provider: LLMProvider | No
         update_run_step(project_id, run_id, "style_profile", "running")
         print(f"[{project_id}] [RUN] 章节摘要 + 证据索引 + 风格解析 并行中...")
         run_initial_text_analysis(db, project_id, llm_provider)
+        mirror_project_snapshot(db, project_id)
         update_run_step(project_id, run_id, "chapter_summary", "succeeded", "章节摘要完成")
         update_run_step(project_id, run_id, "evidence_extraction", "succeeded", "证据索引完成")
         print(f"[{project_id}] [OK] 章节摘要 + 证据索引 完成")
         update_run_step(project_id, run_id, "story_bible", "running")
         print(f"[{project_id}] [RUN] Story Bible 生成中...")
         generate_story_bible(db, project_id, llm_provider)
+        mirror_project_snapshot(db, project_id)
         update_run_step(project_id, run_id, "story_bible", "succeeded", "Story Bible 完成")
         print(f"[{project_id}] [OK] Story Bible 完成")
         generate_style_profile(db, project_id, llm_provider)
+        mirror_project_snapshot(db, project_id)
         update_run_step(project_id, run_id, "style_profile", "succeeded", "Style Profile 完成")
         print(f"[{project_id}] [OK] Style Profile 完成")
         update_run_step(project_id, run_id, "scene_plan", "running")
         print(f"[{project_id}] [RUN] Scene Plan 生成中...")
         scene_plan = generate_scene_plan_artifact(db, project_id, llm_provider)
+        mirror_project_snapshot(db, project_id)
         update_run_step(project_id, run_id, "scene_plan", "succeeded", "Scene Plan 完成")
         print(f"[{project_id}] [OK] Scene Plan 完成")
         STORE.scene_plans[project_id] = scene_plan
@@ -148,10 +153,12 @@ def generate_script(project_id: str, db=None, llm_provider: LLMProvider | None =
         print(f"[{project_id}] [RUN] 逐场生成剧本 + 校验中...")
         try:
             result = generate_script_from_confirmed_scene_plan(db, project_id, llm_provider)
+            mirror_project_snapshot(db, project_id)
             update_run_step(project_id, run_id, "script_generation", "succeeded", "剧本生成完成")
             update_run_step(project_id, run_id, "validation", "succeeded", "逐场校验完成")
             update_run_status(run_id, "succeeded")
         except PermissionError:
+            mirror_project_snapshot(db, project_id)
             update_run_step(project_id, run_id, "validation", "failed", "校验未通过")
             update_run_status(run_id, "failed", "校验未通过")
             raise

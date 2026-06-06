@@ -13,6 +13,7 @@ from app.services.chapter_persistence_service import (
 )
 from app.services.checkpoint_service import create_checkpoint
 from app.services.input_adapter import normalize_to_markdown
+from app.services.local_snapshot_service import mirror_project_snapshot
 from app.services.project_service import require_project, update_project_stage, update_project_stage_in_db
 from app.services.store import STORE
 
@@ -52,6 +53,7 @@ async def upload_novel(project_id: str, request: Request, db: Session = Depends(
     replace_project_chapters(db, project_id, chapters)
     update_project_stage(project_id, ProjectStage.chapters_pending)
     update_project_stage_in_db(db, project_id, ProjectStage.chapters_pending)
+    mirror_project_snapshot(db, project_id)
     return {
         "file_id": STORE.next_id("file"),
         "project_id": project_id,
@@ -86,5 +88,6 @@ def confirm_chapters(project_id: str, payload: ConfirmChaptersRequest, db: Sessi
     checkpoint = create_checkpoint(project_id, "chapters_confirmed", db)
     update_project_stage(project_id, ProjectStage.chapters_confirmed)
     update_project_stage_in_db(db, project_id, ProjectStage.chapters_confirmed)
+    mirror_project_snapshot(db, project_id)
     return {"project_id": project_id, "stage": ProjectStage.chapters_confirmed, "checkpoint_id": checkpoint["checkpoint_id"]}
 

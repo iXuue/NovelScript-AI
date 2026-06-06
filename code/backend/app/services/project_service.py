@@ -66,6 +66,8 @@ def update_project_stage(project_id: str, stage: ProjectStage) -> dict:
 
 
 def update_project_stage_in_db(db, project_id: str, stage: ProjectStage) -> None:
+    if db is None:
+        return
     project = db.get(Project, project_id)
     if project is not None:
         project.stage = stage

@@ -3,10 +3,12 @@ from sqlalchemy.orm import Session
 
 from app.models.chapter import Chapter, Paragraph
 from app.services.chapter_service import DetectedChapter
-from app.services.store import now_utc
+from app.services.store import STORE, now_utc
 
 
-def replace_project_chapters(db: Session, project_id: str, chapters: list[DetectedChapter]) -> None:
+def replace_project_chapters(db: Session | None, project_id: str, chapters: list[DetectedChapter]) -> None:
+    if db is None:
+        return  # STORE 已在 uploads.py 中写入
     db.execute(delete(Paragraph).where(Paragraph.project_id == project_id))
     db.execute(delete(Chapter).where(Chapter.project_id == project_id))
 
@@ -40,7 +42,9 @@ def replace_project_chapters(db: Session, project_id: str, chapters: list[Detect
     db.commit()
 
 
-def list_pending_chapter_drafts(db: Session, project_id: str) -> list[dict]:
+def list_pending_chapter_drafts(db: Session | None, project_id: str) -> list[dict]:
+    if db is None:
+        return STORE.chapters_pending.get(project_id, [])
     chapters = (
         db.query(Chapter)
         .filter(Chapter.project_id == project_id, Chapter.status == "pending")
@@ -58,7 +62,18 @@ def list_pending_chapter_drafts(db: Session, project_id: str) -> list[dict]:
     ]
 
 
-def confirm_project_chapters(db: Session, project_id: str, chapter_ids: list[str]) -> None:
+def confirm_project_chapters(db: Session | None, project_id: str, chapter_ids: list[str]) -> None:
+    if db is None:
+        pending = STORE.chapters_pending.get(project_id, [])
+        by_id = {c["chapter_id"]: c for c in pending}
+        if any(cid not in by_id for cid in chapter_ids):
+            raise ValueError("Unknown chapter id")
+        if set(chapter_ids) != set(by_id):
+            raise ValueError("All pending chapters must be confirmed")
+        for order, cid in enumerate(chapter_ids, start=1):
+            by_id[cid]["order"] = order
+        return
+
     chapters = (
         db.query(Chapter)
         .filter(Chapter.project_id == project_id, Chapter.status == "pending")

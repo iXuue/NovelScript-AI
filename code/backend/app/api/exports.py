@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.api.errors import api_error
 from app.core.database import get_db
 from app.services.export_job_service import create_export_job, get_export_job
+from app.services.export_service import EXPORT_CONTENT_TYPES
+from app.services.local_snapshot_service import mirror_project_snapshot
 from app.services.project_service import require_project
 from app.services.run_service import create_project_run
 
@@ -33,6 +35,7 @@ def create_export_endpoint(project_id: str, payload: CreateExportRequest, db: Se
     except PermissionError:
         raise api_error(409, "script_not_ready", "Script is not ready")
     create_project_run(project_id, "export", "export", ["export"])
+    mirror_project_snapshot(db, project_id)
     return export
 
 
@@ -45,8 +48,15 @@ def get_export_endpoint(project_id: str, export_id: str, db: Session = Depends(g
     export = get_export_job(db, project_id, export_id)
     if export is None:
         raise api_error(404, "export_not_found", "Export not found")
-    path = Path(export.file_path)
-    if not path.exists():
+    if isinstance(export, dict):
+        file_path = Path(export["file_path"])
+        content_type = EXPORT_CONTENT_TYPES.get(export["format"], "application/octet-stream")
+        filename = export.get("filename", "export")
+    else:
+        file_path = Path(export.file_path)
+        content_type = export.content_type
+        filename = export.filename
+    if not file_path.exists():
         raise api_error(404, "export_file_not_found", "Export file not found")
-    return FileResponse(path, media_type=export.content_type, filename=export.filename)
+    return FileResponse(file_path, media_type=content_type, filename=filename)
 

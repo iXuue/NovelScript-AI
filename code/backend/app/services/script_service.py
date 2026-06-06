@@ -74,21 +74,30 @@ def generate_script_from_confirmed_scene_plan(db: Session, project_id: str, llm_
     return {"script_version_id": version.script_version_id, "status": "running", "stage": ProjectStage.script_generating}
 
 
-def get_current_script_for_ui(db: Session, project_id: str) -> dict | None:
+def get_current_script_for_ui(db: Session | None, project_id: str) -> dict | None:
+    if db is None:
+        return STORE.script_ui.get(project_id)
     version = _current_script_version(db, project_id) or _latest_script_version(db, project_id)
     if version is None:
         return None
     return _script_ui(version)
 
 
-def get_current_yaml_preview(db: Session, project_id: str) -> dict | None:
+def get_current_yaml_preview(db: Session | None, project_id: str) -> dict | None:
+    if db is None:
+        return STORE.yaml_previews.get(project_id)
     version = _current_script_version(db, project_id) or _latest_script_version(db, project_id)
     if version is None:
         return None
     return _yaml_preview(version)
 
 
-def get_current_internal_script(db: Session, project_id: str) -> tuple[ScriptVersion, dict] | None:
+def get_current_internal_script(db: Session | None, project_id: str) -> tuple[ScriptVersion, dict] | None:
+    if db is None:
+        internal = STORE.scripts.get(project_id)
+        if internal is None:
+            return None
+        return None, internal  # 本地模式下 ScriptVersion ORM 对象不可用，返回 (None, dict)
     version = _current_script_version(db, project_id)
     if version is None:
         return None
@@ -239,14 +248,29 @@ def _replace_script_scene_content(db: Session, version: ScriptVersion, script_sc
             ScriptContentBlock.scene_id == script_scene.scene_id,
         )
     )
+    used_block_ids = {
+        row[0]
+        for row in db.query(ScriptContentBlock.content_block_id)
+        .filter(
+            ScriptContentBlock.script_version_id == version.script_version_id,
+            ScriptContentBlock.scene_id != script_scene.scene_id,
+        )
+        .all()
+    }
+    next_block_number = _next_content_block_number(used_block_ids)
     timestamp = now_utc()
     for index, block in enumerate(repaired_scene["content_blocks"], start=1):
+        content_block_id = block["content_block_id"]
+        if content_block_id in used_block_ids:
+            content_block_id = f"CB{next_block_number:03d}"
+            next_block_number += 1
+        used_block_ids.add(content_block_id)
         db.add(
             ScriptContentBlock(
                 script_version_id=version.script_version_id,
                 project_id=version.project_id,
                 scene_id=script_scene.scene_id,
-                content_block_id=block["content_block_id"],
+                content_block_id=content_block_id,
                 order=index,
                 block_type=block["type"],
                 text=block["text"],
@@ -257,6 +281,11 @@ def _replace_script_scene_content(db: Session, version: ScriptVersion, script_sc
             )
         )
     db.flush()
+
+
+def _next_content_block_number(used_block_ids: set[str]) -> int:
+    numbers = [int(block_id[2:]) for block_id in used_block_ids if block_id.startswith("CB") and block_id[2:].isdigit()]
+    return max(numbers, default=0) + 1
 
 
 def _script_scene_prompt(

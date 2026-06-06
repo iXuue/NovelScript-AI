@@ -2,6 +2,36 @@ from app.core.database import get_db
 from app.models.analysis import ChapterSummary, EvidenceItem
 
 
+def test_scene_plan_timeout_keeps_completed_analysis_snapshot(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCAL_DATA_ROOT", str(tmp_path))
+    original_generate = client.fake_llm_provider.generate
+
+    def fail_on_story_bible(request):
+        if request.task_type == "story_bible":
+            raise TimeoutError("story bible timed out")
+        return original_generate(request)
+
+    client.fake_llm_provider.generate = fail_on_story_bible
+    project = client.post("/projects", json={"name": "Timeout Snapshot"}).json()
+    project_id = project["project_id"]
+    upload = client.post(
+        f"/projects/{project_id}/uploads",
+        files={"file": ("novel.md", "# 第一章\n\n她回来了。")},
+    )
+    chapter_ids = [chapter["chapter_id"] for chapter in upload.json()["detected_chapters"]]
+    client.post(f"/projects/{project_id}/chapters/confirm", json={"chapter_ids": chapter_ids})
+
+    try:
+        client.post(f"/projects/{project_id}/scene-plan/generate")
+    except TimeoutError:
+        pass
+
+    project_dirs = list(tmp_path.iterdir())
+    assert len(project_dirs) == 1
+    assert (project_dirs[0] / "chapter_summaries.json").exists()
+    assert (project_dirs[0] / "evidence_items.json").exists()
+
+
 def test_scene_plan_generation_persists_chapter_summaries_and_evidence_from_confirmed_chapters(client):
     project = client.post("/projects", json={"name": "分析项目"}).json()
     project_id = project["project_id"]

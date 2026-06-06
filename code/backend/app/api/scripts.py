@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import api_error
 from app.core.database import get_db
+from app.services.local_snapshot_service import mirror_project_snapshot
 from app.services.llm_provider import LLMProvider, get_llm_provider
 from app.services.orchestrator_service import generate_script
 from app.services.project_service import require_project
@@ -61,7 +62,9 @@ def repair_script_scene_endpoint(
 ):
     try:
         require_project(project_id)
-        return repair_script_scene(db, project_id, scene_id, llm_provider)
+        result = repair_script_scene(db, project_id, scene_id, llm_provider)
+        mirror_project_snapshot(db, project_id)
+        return result
     except KeyError:
         raise api_error(404, "script_scene_not_found", "Script scene not found")
     except PermissionError as exc:

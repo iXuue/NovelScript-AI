@@ -69,7 +69,9 @@ def generate_scene_plan_artifact(db: Session, project_id: str, llm_provider: LLM
     return scene_plan_to_dict(scene_plan)
 
 
-def get_current_scene_plan(db: Session, project_id: str) -> dict | None:
+def get_current_scene_plan(db: Session | None, project_id: str) -> dict | None:
+    if db is None:
+        return STORE.scene_plans.get(project_id)
     scene_plan = (
         db.query(ScenePlan)
         .filter(ScenePlan.project_id == project_id, ScenePlan.status == ArtifactStatus.current)

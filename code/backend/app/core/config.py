@@ -10,6 +10,8 @@ class Settings:
     app_name: str = "NovelScript AI"
     api_base_url: str = "http://localhost:8000"
     database_url: str = "postgresql+psycopg://novelscript:novelscript@localhost:5432/novelscript"
+    use_local_storage: bool = False
+    local_data_root: str = "data"
     local_developer_logs_enabled: bool = True
     storage_root: str = "/app/storage"
     openai_base_url: str = "https://api.openai.com/v1"
@@ -29,6 +31,8 @@ def get_settings(env_file: str | Path | None = None) -> Settings:
             "DATABASE_URL",
             default="postgresql+psycopg://novelscript:novelscript@localhost:5432/novelscript",
         ),
+        use_local_storage=_env_value(env_values, "USE_LOCAL_STORAGE", default="false").lower() == "true",
+        local_data_root=_env_value(env_values, "LOCAL_DATA_ROOT", default="data"),
         local_developer_logs_enabled=_env_value(env_values, "LOCAL_DEVELOPER_LOGS_ENABLED", default="true").lower()
         == "true",
         storage_root=_env_value(env_values, "STORAGE_ROOT", default="/app/storage"),
