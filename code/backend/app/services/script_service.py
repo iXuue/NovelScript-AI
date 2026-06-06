@@ -17,7 +17,7 @@ from app.services.project_service import update_project_stage, update_project_st
 from app.services.store import STORE, now_utc, persistent_id
 
 
-BLOCK_TYPES = {"action", "dialogue", "narration", "transition", "note"}
+BLOCK_TYPES = {"action", "dialogue", "narration", "transition", "note", "parenthetical", "voiceover", "description", "sound", "character", "shot"}
 MAX_REPAIR_ATTEMPTS = 2
 
 
@@ -198,14 +198,16 @@ def _replace_script_version(db: Session, project_id: str, title: str, scenes: li
         for index, scene in enumerate(scenes, start=1)
     ]
     blocks = []
+    block_counter = 0
     for scene in scenes:
         for index, block in enumerate(scene["content_blocks"], start=1):
+            block_counter += 1
             blocks.append(
                 ScriptContentBlock(
                     script_version_id=script_version.script_version_id,
                     project_id=project_id,
                     scene_id=scene["scene_id"],
-                    content_block_id=block["content_block_id"],
+                    content_block_id=f"CB{block_counter:03d}",
                     order=index,
                     block_type=block["type"],
                     text=block["text"],

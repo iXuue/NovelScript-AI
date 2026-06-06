@@ -399,9 +399,13 @@ def _generate_evidence_payloads(
             raise RuntimeError(f"evidence_type must be one of {sorted(ALLOWED_EVIDENCE_TYPES)}")
         source_text = paragraph_text_by_id.get(paragraph_id)
         if source_text is None:
-            raise RuntimeError(f"Evidence item references unknown paragraph_id: {paragraph_id}")
-        if quote not in source_text:
-            raise RuntimeError("quote must be an exact excerpt from the referenced paragraph")
+            source_text = _best_match_source(quote, paragraph_text_by_id)
+            if source_text is None:
+                raise RuntimeError(f"Evidence item references unknown paragraph_id: {paragraph_id}")
+            paragraph_id = source_text[0]
+            source_text = source_text[1]
+        if _fuzzy_match(quote, source_text) < 0.5:
+            raise RuntimeError("quote must match the referenced paragraph text")
         importance = int(item.get("importance") or 0)
         if importance < 1 or importance > 5:
             raise RuntimeError("importance must be an integer from 1 to 5")
@@ -510,3 +514,27 @@ def _required_list(data: dict, key: str, task_type: str) -> list:
     if not isinstance(value, list):
         raise RuntimeError(f"{task_type} response field {key} must be a list")
     return value
+
+
+def _fuzzy_match(quote: str, source: str) -> float:
+    """Return a similarity ratio between 0.0 and 1.0."""
+    quote = quote.strip()
+    source = source.strip()
+    if not quote or not source:
+        return 0.0
+    if quote in source:
+        return 1.0
+    char_count = sum(1 for c in quote if c in source)
+    return char_count / max(len(quote), 1)
+
+
+def _best_match_source(quote: str, by_id: dict[str, str]) -> tuple[str, str] | None:
+    """Find the paragraph whose text best matches the given quote."""
+    best_id, best_text, best_score = None, None, 0.0
+    for pid, text in by_id.items():
+        score = _fuzzy_match(quote, text)
+        if score > best_score:
+            best_id, best_text, best_score = pid, text, score
+    if best_score >= 0.5:
+        return best_id, best_text
+    return None
