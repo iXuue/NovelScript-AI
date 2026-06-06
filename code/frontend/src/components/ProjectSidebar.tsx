@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 
-import type { ProjectSummary, ScenePlan, UiMode } from "../types";
+import type { AuthUser, ProjectSummary, ScenePlan, UiMode } from "../types";
 
 type ViewMode = "conversation" | "scene-plan" | "script";
 
@@ -8,6 +8,7 @@ type Props = {
   collapsed: boolean;
   projects: ProjectSummary[];
   currentProject: ProjectSummary | null;
+  authUser: AuthUser | null;
   error: string | null;
   loading: boolean;
   canCreateProject: boolean;
@@ -21,10 +22,12 @@ type Props = {
   onSelectView: (view: ViewMode) => void;
   onSelectProject: (projectId: string) => void;
   onNewProject: () => void;
+  onLogout: () => void;
 };
 
 function LegacyProjectSidebar({
   collapsed,
+  authUser,
   canCreateProject,
   currentProject,
   projects,
@@ -97,6 +100,7 @@ function LegacyProjectSidebar({
 
 export function ProjectSidebar({
   collapsed,
+  authUser,
   canCreateProject,
   currentProject,
   error,
@@ -109,6 +113,7 @@ export function ProjectSidebar({
   viewMode,
   onNewProject,
   onNewProjectNameChange,
+  onLogout,
   onSelectProject,
   onSelectView,
   onToggleCollapsed
@@ -134,6 +139,14 @@ export function ProjectSidebar({
         {!collapsed ? (
           <div>
             <div className="figma-brand-title">NovelScript AI</div>
+            {authUser ? (
+              <div className="figma-auth-user">
+                <span>{authUser.login_id}</span>
+                <button type="button" onClick={onLogout}>
+                  退出
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
         <button className="figma-icon-button" type="button" onClick={onToggleCollapsed}>
@@ -185,9 +198,7 @@ export function ProjectSidebar({
                     ) : null}
                   </div>
                 ))
-              ) : (
-                <div className="figma-empty-project-list">暂无项目</div>
-              )}
+              ) : null}
             </div>
           </section>
 

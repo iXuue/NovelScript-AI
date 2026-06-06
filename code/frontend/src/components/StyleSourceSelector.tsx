@@ -170,10 +170,15 @@ export function StyleSourceSelector({ locked, loading, selected, onChange, onRef
                 <small>适合描述节奏、对白、影像质感和改编边界。</small>
               </label>
 
-              <label className="figma-reference-upload">
-                <span>历史剧本参考</span>
-                <strong>{referenceFileName || "上传参考剧本文件"}</strong>
-                <small>{customText.trim() ? "已填写自定义描述，暂不能上传参考文件。" : "支持 md、txt、docx、pdf。"}</small>
+              <label className={locked || loading || hasText ? "figma-reference-upload disabled" : "figma-reference-upload"}>
+                <span className="figma-reference-label">历史剧本参考</span>
+                <span className="figma-reference-control">
+                  <span className="figma-reference-icon" aria-hidden="true">🔗</span>
+                  <span className="figma-reference-copy">
+                    <strong>{referenceFileName || "上传参考剧本文件"}</strong>
+                    <small>{customText.trim() ? "已填写自定义描述，暂不能上传参考文件。" : "支持 md、txt、docx、pdf。"}</small>
+                  </span>
+                </span>
                 <input
                   aria-label="上传历史剧本参考"
                   disabled={locked || loading || hasText}
