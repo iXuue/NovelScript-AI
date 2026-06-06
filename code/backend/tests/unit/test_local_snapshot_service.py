@@ -5,7 +5,8 @@ from app.models.analysis import ChapterSummary, EvidenceItem
 from app.models.chapter import Chapter, Paragraph
 from app.models.project import Project
 from app.models.user import User
-from app.services.local_snapshot_service import save_project_snapshot_from_pg
+from app.services import local_snapshot_service
+from app.services.local_snapshot_service import mirror_project_snapshot, save_project_snapshot_from_pg
 from app.services.store import now_utc
 
 
@@ -38,9 +39,9 @@ def test_pg_snapshot_writes_chapter_summaries_and_evidence_items(test_db, tmp_pa
     chapter = Chapter(
         project_id=project_id,
         chapter_id="CH001",
-        title="第一章",
+        title="Chapter 1",
         order=1,
-        raw_text="她回来了。",
+        raw_text="She returns.",
         paragraph_count=1,
         status="confirmed",
         created_at=timestamp,
@@ -55,7 +56,7 @@ def test_pg_snapshot_writes_chapter_summaries_and_evidence_items(test_db, tmp_pa
             chapter_id="CH001",
             paragraph_id="CH001_P001",
             order=1,
-            text="她回来了。",
+            text="She returns.",
             created_at=timestamp,
         )
     )
@@ -63,14 +64,14 @@ def test_pg_snapshot_writes_chapter_summaries_and_evidence_items(test_db, tmp_pa
         ChapterSummary(
             project_id=project_id,
             chapter_id="CH001",
-            title="第一章",
-            summary="她在雨夜归来。",
-            key_events=["归来"],
-            characters=["她"],
-            locations=["旧宅"],
-            conflicts=["是否进门"],
-            foreshadowing=["旧信"],
-            adaptation_suggestions=["保留雨夜"],
+            title="Chapter 1",
+            summary="She returns on a rainy night.",
+            key_events=["Return"],
+            characters=["She"],
+            locations=["Old house"],
+            conflicts=["Whether she enters"],
+            foreshadowing=["Old letter"],
+            adaptation_suggestions=["Keep the rainy night"],
             source="fake",
             created_at=timestamp,
             updated_at=timestamp,
@@ -83,12 +84,12 @@ def test_pg_snapshot_writes_chapter_summaries_and_evidence_items(test_db, tmp_pa
             chapter_id="CH001",
             paragraph_id="CH001_P001",
             paragraph_ids=["CH001_P001"],
-            quote="她回来了。",
-            evidence_type="关键事件",
-            explanation="主角归来推动剧情。",
-            related_characters=["她"],
-            related_locations=["旧宅"],
-            related_plot_points=["归来"],
+            quote="She returns.",
+            evidence_type="key_event",
+            explanation="The protagonist returns and moves the plot.",
+            related_characters=["She"],
+            related_locations=["Old house"],
+            related_plot_points=["Return"],
             importance=5,
             must_keep=True,
             source="fake",
@@ -104,9 +105,29 @@ def test_pg_snapshot_writes_chapter_summaries_and_evidence_items(test_db, tmp_pa
     evidence = json.loads((project_dir / "evidence_items.json").read_text(encoding="utf-8"))
     paragraphs = json.loads((project_dir / "paragraphs.json").read_text(encoding="utf-8"))
 
-    assert summaries[0]["summary"] == "她在雨夜归来。"
+    assert summaries[0]["summary"] == "She returns on a rainy night."
     assert evidence[0]["evidence_id"] == "EV001"
     assert evidence[0]["paragraph_ids"] == ["CH001_P001"]
     assert "paragraph_id" not in evidence[0]
-    assert evidence[0]["quote"] == "她回来了。"
-    assert paragraphs[0]["paragraphs"][0]["text"] == "她回来了。"
+    assert evidence[0]["quote"] == "She returns."
+    assert paragraphs[0]["paragraphs"][0]["text"] == "She returns."
+
+
+def test_mirror_project_snapshot_rolls_back_session_after_snapshot_failure(monkeypatch):
+    class SessionStub:
+        def __init__(self):
+            self.rollback_called = False
+
+        def rollback(self):
+            self.rollback_called = True
+
+    def fail_snapshot(db, project_id):
+        raise RuntimeError("snapshot failed")
+
+    session = SessionStub()
+    monkeypatch.setattr(local_snapshot_service, "snapshot_enabled", lambda: True)
+    monkeypatch.setattr(local_snapshot_service, "save_project_snapshot_from_pg", fail_snapshot)
+
+    mirror_project_snapshot(session, "proj_snapshot")
+
+    assert session.rollback_called is True

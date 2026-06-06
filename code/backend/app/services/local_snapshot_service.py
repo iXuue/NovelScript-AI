@@ -78,6 +78,8 @@ def mirror_project_snapshot(db: Session | None, project_id: str) -> None:
         save_project_snapshot_from_pg(db, project_id)
     except Exception:
         logger.exception("Failed to mirror project snapshot: %s", project_id)
+        if db is not None:
+            db.rollback()
 
 
 def _write_json(path: Path, data: Any) -> None:
