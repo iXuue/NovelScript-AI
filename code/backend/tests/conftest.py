@@ -160,7 +160,7 @@ def _test_client_context(authenticated: bool):
         if authenticated:
             response = test_client.post(
                 "/auth/register",
-                json={"login_id": "test-user", "password": "password123"},
+                json={"login_id": "testuser", "password": "password123"},
             )
             assert response.status_code == 200, response.text
             session = response.json()

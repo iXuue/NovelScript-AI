@@ -29,7 +29,7 @@ def list_messages_endpoint(
 ):
     try:
         require_project(project_id, db, current_user.user_id)
-        return list_primary_messages(project_id)
+        return list_primary_messages(project_id, db)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
 
@@ -43,7 +43,7 @@ def send_message_endpoint(
 ):
     try:
         require_project(project_id, db, current_user.user_id)
-        return send_message(project_id, payload.content)
+        return send_message(project_id, payload.content, db)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
 
@@ -57,7 +57,7 @@ def modify_script_endpoint(
 ):
     try:
         require_project(project_id, db, current_user.user_id)
-        return modify_script(project_id, payload.message, payload.target)
+        return modify_script(project_id, payload.message, payload.target, db)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
     except PermissionError:

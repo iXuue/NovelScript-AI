@@ -43,35 +43,36 @@ def generate_scene_plan(project_id: str, db=None, llm_provider: LLMProvider | No
             "style_profile",
             "scene_plan",
         ],
+        db=db,
     )
     if db is not None:
         run_id = run["run_id"]
-        update_run_status(run_id, "running")
+        update_run_status(run_id, "running", db=db)
         print(f"[{project_id}] [START] 开始生成 Scene Plan")
-        update_run_step(project_id, run_id, "chapter_summary", "running")
-        update_run_step(project_id, run_id, "evidence_extraction", "running")
-        update_run_step(project_id, run_id, "style_profile", "running")
+        update_run_step(project_id, run_id, "chapter_summary", "running", db=db)
+        update_run_step(project_id, run_id, "evidence_extraction", "running", db=db)
+        update_run_step(project_id, run_id, "style_profile", "running", db=db)
         print(f"[{project_id}] [RUN] 章节摘要 + 证据索引 + 风格解析 并行中...")
         run_initial_text_analysis(db, project_id, llm_provider)
-        update_run_step(project_id, run_id, "chapter_summary", "succeeded", "章节摘要完成")
-        update_run_step(project_id, run_id, "evidence_extraction", "succeeded", "证据索引完成")
+        update_run_step(project_id, run_id, "chapter_summary", "succeeded", "章节摘要完成", db=db)
+        update_run_step(project_id, run_id, "evidence_extraction", "succeeded", "证据索引完成", db=db)
         print(f"[{project_id}] [OK] 章节摘要 + 证据索引 完成")
-        update_run_step(project_id, run_id, "story_bible", "running")
+        update_run_step(project_id, run_id, "story_bible", "running", db=db)
         print(f"[{project_id}] [RUN] Story Bible 生成中...")
         generate_story_bible(db, project_id, llm_provider)
-        update_run_step(project_id, run_id, "story_bible", "succeeded", "Story Bible 完成")
+        update_run_step(project_id, run_id, "story_bible", "succeeded", "Story Bible 完成", db=db)
         print(f"[{project_id}] [OK] Story Bible 完成")
         generate_style_profile(db, project_id, llm_provider)
-        update_run_step(project_id, run_id, "style_profile", "succeeded", "Style Profile 完成")
+        update_run_step(project_id, run_id, "style_profile", "succeeded", "Style Profile 完成", db=db)
         print(f"[{project_id}] [OK] Style Profile 完成")
-        update_run_step(project_id, run_id, "scene_plan", "running")
+        update_run_step(project_id, run_id, "scene_plan", "running", db=db)
         print(f"[{project_id}] [RUN] Scene Plan 生成中...")
         scene_plan = generate_scene_plan_artifact(db, project_id, llm_provider)
-        update_run_step(project_id, run_id, "scene_plan", "succeeded", "Scene Plan 完成")
+        update_run_step(project_id, run_id, "scene_plan", "succeeded", "Scene Plan 完成", db=db)
         print(f"[{project_id}] [OK] Scene Plan 完成")
         STORE.scene_plans[project_id] = scene_plan
         update_project_stage(project_id, ProjectStage.scene_plan_draft)
-        update_run_status(run_id, "succeeded")
+        update_run_status(run_id, "succeeded", db=db)
         return {"run_id": run_id, "scene_plan_id": scene_plan["scene_plan_id"], "status": "running"}
     scenes = []
     chapters = _confirmed_chapter_drafts(db, project_id) if db is not None else STORE.chapters_pending.get(project_id, [])
@@ -140,20 +141,21 @@ def generate_script(project_id: str, db=None, llm_provider: LLMProvider | None =
             trigger_type="script_generation",
             stage="script_generating",
             steps=["script_generation", "validation"],
+            db=db,
         )
         run_id = run["run_id"]
-        update_run_status(run_id, "running")
-        update_run_step(project_id, run_id, "script_generation", "running")
+        update_run_status(run_id, "running", db=db)
+        update_run_step(project_id, run_id, "script_generation", "running", db=db)
         print(f"[{project_id}] [START] 开始生成剧本")
         print(f"[{project_id}] [RUN] 逐场生成剧本 + 校验中...")
         try:
             result = generate_script_from_confirmed_scene_plan(db, project_id, llm_provider)
-            update_run_step(project_id, run_id, "script_generation", "succeeded", "剧本生成完成")
-            update_run_step(project_id, run_id, "validation", "succeeded", "逐场校验完成")
-            update_run_status(run_id, "succeeded")
+            update_run_step(project_id, run_id, "script_generation", "succeeded", "剧本生成完成", db=db)
+            update_run_step(project_id, run_id, "validation", "succeeded", "逐场校验完成", db=db)
+            update_run_status(run_id, "succeeded", db=db)
         except PermissionError:
-            update_run_step(project_id, run_id, "validation", "failed", "校验未通过")
-            update_run_status(run_id, "failed", "校验未通过")
+            update_run_step(project_id, run_id, "validation", "failed", "校验未通过", db=db)
+            update_run_status(run_id, "failed", "校验未通过", db=db)
             raise
         result["run_id"] = run_id
         return result

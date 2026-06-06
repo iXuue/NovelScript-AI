@@ -139,14 +139,6 @@ export function ProjectSidebar({
         {!collapsed ? (
           <div>
             <div className="figma-brand-title">NovelScript AI</div>
-            {authUser ? (
-              <div className="figma-auth-user">
-                <span>{authUser.login_id}</span>
-                <button type="button" onClick={onLogout}>
-                  退出
-                </button>
-              </div>
-            ) : null}
           </div>
         ) : null}
         <button className="figma-icon-button" type="button" onClick={onToggleCollapsed}>
@@ -264,6 +256,23 @@ export function ProjectSidebar({
               生成剧本
             </button>
           </nav>
+
+          {authUser ? (
+            <section className="figma-workspace-account-panel" aria-label="用户登录信息">
+              <div className="figma-workspace-account-copy">
+                <span>当前账号</span>
+                <strong>{authUser.login_id}</strong>
+              </div>
+              <div className="figma-workspace-account-actions">
+                <button type="button" onClick={onLogout}>
+                  退出登录
+                </button>
+                <button type="button" onClick={onLogout}>
+                  切换账号
+                </button>
+              </div>
+            </section>
+          ) : null}
         </>
       ) : null}
     </aside>

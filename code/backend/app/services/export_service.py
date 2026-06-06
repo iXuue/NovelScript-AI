@@ -1,4 +1,5 @@
 from copy import deepcopy
+from io import BytesIO
 import json
 
 import yaml
@@ -40,7 +41,7 @@ def to_yaml_preview(internal_or_clean: dict) -> str:
     return yaml.safe_dump(clean, allow_unicode=True, sort_keys=False)
 
 
-def serialize_export(internal: dict, export_format: str) -> str:
+def serialize_export(internal: dict, export_format: str) -> str | bytes:
     clean = to_user_clean_json(internal)
     if export_format == "yaml":
         return to_yaml_preview(clean)
@@ -48,6 +49,30 @@ def serialize_export(internal: dict, export_format: str) -> str:
         return json.dumps(clean, ensure_ascii=False, indent=2)
     if export_format in {"markdown", "txt"}:
         return to_yaml_preview(clean)
-    if export_format in {"docx", "pdf"}:
-        return to_yaml_preview(clean)
+    if export_format == "docx":
+        return _serialize_docx(clean)
+    if export_format == "pdf":
+        raise ValueError("pdf_not_available")
     raise ValueError(f"unsupported export format: {export_format}")
+
+
+def _serialize_docx(clean: dict) -> bytes:
+    from docx import Document
+
+    document = Document()
+    document.add_heading(str(clean.get("title") or "Script"), level=1)
+    for scene in clean.get("scenes") or []:
+        document.add_heading(str(scene.get("title") or scene.get("scene_id") or "Scene"), level=2)
+        scene_info = scene.get("scene_info")
+        if scene_info:
+            document.add_paragraph(str(scene_info))
+        for block in scene.get("content_blocks") or []:
+            speaker = block.get("speaker")
+            text = block.get("text")
+            if speaker:
+                document.add_paragraph(str(speaker))
+            if text:
+                document.add_paragraph(str(text))
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()

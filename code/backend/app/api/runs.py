@@ -21,7 +21,7 @@ def get_active_run_endpoint(
         require_project(project_id, db, current_user.user_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
-    return get_active_run(project_id)
+    return get_active_run(project_id, db)
 
 
 @router.get("/projects/{project_id}/runs/{run_id}")
@@ -35,7 +35,7 @@ def get_run_endpoint(
         require_project(project_id, db, current_user.user_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
-    run = get_run(project_id, run_id)
+    run = get_run(project_id, run_id, db)
     if run is None:
         raise api_error(404, "run_not_found", "Run not found")
     return run

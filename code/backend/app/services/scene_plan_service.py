@@ -10,8 +10,10 @@ from app.models.repair import RepairAttempt
 from app.models.scene_plan import ScenePlan, ScenePlanScene, ScenePlanValidation
 from app.models.story import StoryBible
 from app.models.style import StyleProfile
+from app.services.artifact_service import mark_downstream_stale
 from app.services.checkpoint_service import create_checkpoint
-from app.services.llm_provider import LLMProvider, LLMRequest
+from app.services.context_budget_service import compact_lines, generate_with_context_log, rank_evidence_items, truncate_text
+from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage, update_project_stage_in_db
 from app.services.store import STORE, now_utc, persistent_id
 from app.services.style_service import lock_style_source
@@ -52,12 +54,16 @@ def generate_scene_plan_artifact(db: Session, project_id: str, llm_provider: LLM
     if llm_provider is None:
         raise RuntimeError("LLM provider is required to generate Scene Plan")
 
-    response = llm_provider.generate(
-        LLMRequest(
-            task_type="scene_plan",
-            prompt=_scene_plan_prompt(chapters, summaries, evidence_items, story_bible, style_profile),
-            response_format="json",
-        )
+    response = generate_with_context_log(
+        llm_provider,
+        task_type="scene_plan",
+        prompt=_scene_plan_prompt(chapters, summaries, evidence_items, story_bible, style_profile),
+        response_format="json",
+        db=db,
+        project_id=project_id,
+        step_type="scene_plan",
+        source_item_count=len(chapters) + len(summaries) + len(evidence_items),
+        included_item_count=len(chapters) + len(summaries) + min(len(evidence_items), 80),
     )
     payload = _validate_scene_plan_payload(
         _load_json_object(response.text),
@@ -72,7 +78,7 @@ def generate_scene_plan_artifact(db: Session, project_id: str, llm_provider: LLM
 def get_current_scene_plan(db: Session, project_id: str) -> dict | None:
     scene_plan = (
         db.query(ScenePlan)
-        .filter(ScenePlan.project_id == project_id, ScenePlan.status == ArtifactStatus.current)
+        .filter(ScenePlan.project_id == project_id, ScenePlan.status == ArtifactStatus.current, ScenePlan.is_current.is_(True))
         .one_or_none()
     )
     if scene_plan is None:
@@ -83,7 +89,7 @@ def get_current_scene_plan(db: Session, project_id: str) -> dict | None:
 def repair_current_scene_plan(db: Session, project_id: str, llm_provider: LLMProvider | None) -> dict:
     scene_plan = (
         db.query(ScenePlan)
-        .filter(ScenePlan.project_id == project_id, ScenePlan.status == ArtifactStatus.current)
+        .filter(ScenePlan.project_id == project_id, ScenePlan.status == ArtifactStatus.current, ScenePlan.is_current.is_(True))
         .one_or_none()
     )
     if scene_plan is None:
@@ -103,12 +109,16 @@ def repair_current_scene_plan(db: Session, project_id: str, llm_provider: LLMPro
     if story_bible is None:
         raise RuntimeError("scene_plan repair requires story_bible")
 
-    response = llm_provider.generate(
-        LLMRequest(
-            task_type="scene_plan_repair",
-            prompt=_scene_plan_repair_prompt(scene_plan, validation, chapters, summaries, evidence_items, story_bible),
-            response_format="json",
-        )
+    response = generate_with_context_log(
+        llm_provider,
+        task_type="scene_plan_repair",
+        prompt=_scene_plan_repair_prompt(scene_plan, validation, chapters, summaries, evidence_items, story_bible),
+        response_format="json",
+        db=db,
+        project_id=project_id,
+        step_type="scene_plan_repair",
+        source_item_count=len(chapters) + len(summaries) + len(evidence_items),
+        included_item_count=len(chapters) + len(summaries) + min(len(evidence_items), 80),
     )
     payload = _validate_scene_plan_payload(
         _load_json_object(response.text),
@@ -136,7 +146,7 @@ def repair_current_scene_plan(db: Session, project_id: str, llm_provider: LLMPro
 def confirm_current_scene_plan(db: Session, project_id: str, confirmation_source: str, message_id: str | None = None) -> dict:
     scene_plan = (
         db.query(ScenePlan)
-        .filter(ScenePlan.project_id == project_id, ScenePlan.status == ArtifactStatus.current)
+        .filter(ScenePlan.project_id == project_id, ScenePlan.status == ArtifactStatus.current, ScenePlan.is_current.is_(True))
         .one_or_none()
     )
     if scene_plan is None:
@@ -150,7 +160,7 @@ def confirm_current_scene_plan(db: Session, project_id: str, confirmation_source
 
     update_project_stage(project_id, ProjectStage.scene_plan_confirmed)
     update_project_stage_in_db(db, project_id, ProjectStage.scene_plan_confirmed)
-    lock_style_source(project_id)
+    lock_style_source(project_id, db)
     checkpoint = create_checkpoint(project_id, "scene_plan_confirmed", db)
     cached = STORE.scene_plans.get(project_id)
     if cached is not None:
@@ -197,11 +207,34 @@ def scene_plan_to_dict(scene_plan: ScenePlan) -> dict:
 
 
 def _replace_scene_plan(db: Session, project_id: str, scenes: list[dict], source: str) -> ScenePlan:
-    db.execute(delete(ScenePlan).where(ScenePlan.project_id == project_id))
+    mark_downstream_stale(db, f"scene_plan:{project_id}")
+    previous_current = (
+        db.query(ScenePlan)
+        .filter(ScenePlan.project_id == project_id, ScenePlan.is_current.is_(True))
+        .order_by(ScenePlan.version_number.desc())
+        .first()
+    )
+    for current in db.query(ScenePlan).filter(ScenePlan.project_id == project_id, ScenePlan.is_current.is_(True)).all():
+        current.is_current = False
+        if current.status == ArtifactStatus.current:
+            current.status = ArtifactStatus.historical
+        current.stale_reason = "replaced_by_new_scene_plan"
+        current.updated_at = now_utc()
+    next_version_number = (
+        db.query(ScenePlan.version_number)
+        .filter(ScenePlan.project_id == project_id)
+        .order_by(ScenePlan.version_number.desc())
+        .first()
+    )
+    version_number = (next_version_number[0] if next_version_number else 0) + 1
     timestamp = now_utc()
     scene_plan = ScenePlan(
         scene_plan_id=persistent_id("sp"),
         project_id=project_id,
+        version_number=version_number,
+        is_current=True,
+        parent_scene_plan_id=previous_current.scene_plan_id if previous_current is not None else None,
+        stale_reason=None,
         status=ArtifactStatus.current,
         confirmed=False,
         source=source,
@@ -248,12 +281,16 @@ def _validate_and_store_scene_plan(
     story_bible: StoryBible,
     llm_provider: LLMProvider,
 ) -> ScenePlanValidation:
-    response = llm_provider.generate(
-        LLMRequest(
-            task_type="scene_plan_validation",
-            prompt=_scene_plan_validation_prompt(scene_plan, chapters, summaries, evidence_items, story_bible),
-            response_format="json",
-        )
+    response = generate_with_context_log(
+        llm_provider,
+        task_type="scene_plan_validation",
+        prompt=_scene_plan_validation_prompt(scene_plan, chapters, summaries, evidence_items, story_bible),
+        response_format="json",
+        db=db,
+        project_id=scene_plan.project_id,
+        step_type="scene_plan_validation",
+        source_item_count=len(chapters) + len(summaries) + len(evidence_items),
+        included_item_count=len(chapters) + len(summaries) + min(len(evidence_items), 80),
     )
     payload = _validate_scene_plan_validation_payload(_load_json_object(response.text))
     timestamp = now_utc()
@@ -384,12 +421,13 @@ def _chapter_block(chapters: list[Chapter]) -> str:
 
 
 def _summary_block(summaries: list[ChapterSummary]) -> str:
-    return "\n".join(
+    return compact_lines(
+        (
         json.dumps(
             {
                 "chapter_id": summary.chapter_id,
                 "title": summary.title,
-                "summary": summary.summary,
+                "summary": truncate_text(summary.summary, 1200),
                 "key_events": summary.key_events,
                 "characters": summary.characters,
                 "locations": summary.locations,
@@ -400,17 +438,21 @@ def _summary_block(summaries: list[ChapterSummary]) -> str:
             ensure_ascii=False,
         )
         for summary in summaries
+        ),
+        8000,
     )
 
 
 def _evidence_block(evidence_items: list[EvidenceItem]) -> str:
-    return "\n".join(
+    ranked = rank_evidence_items(evidence_items)
+    return compact_lines(
+        (
         json.dumps(
             {
                 "evidence_id": evidence.evidence_id,
                 "chapter_id": evidence.chapter_id,
                 "paragraph_id": evidence.paragraph_id,
-                "quote": evidence.quote,
+                "quote": truncate_text(evidence.quote, 300, ""),
                 "evidence_type": evidence.evidence_type,
                 "explanation": evidence.explanation,
                 "related_characters": evidence.related_characters,
@@ -421,7 +463,9 @@ def _evidence_block(evidence_items: list[EvidenceItem]) -> str:
             },
             ensure_ascii=False,
         )
-        for evidence in evidence_items
+        for evidence in ranked
+        ),
+        8000,
     )
 
 
@@ -431,13 +475,13 @@ def _story_bible_block(story_bible: StoryBible) -> str:
             "title": story_bible.title,
             "story_type": story_bible.story_type,
             "tone": story_bible.tone,
-            "logline": story_bible.logline,
-            "theme": story_bible.theme,
+            "logline": truncate_text(story_bible.logline, 800),
+            "theme": truncate_text(story_bible.theme, 800),
             "main_characters": story_bible.main_characters,
             "relationships": story_bible.relationships,
             "locations": story_bible.locations,
             "timeline": story_bible.timeline,
-            "central_conflict": story_bible.central_conflict,
+            "central_conflict": truncate_text(story_bible.central_conflict, 800),
             "foreshadowing": story_bible.foreshadowing,
         },
         ensure_ascii=False,

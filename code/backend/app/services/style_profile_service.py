@@ -2,7 +2,8 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.models.style import StyleProfile, StyleReferenceFile, StyleSourceRecord
-from app.services.llm_provider import LLMProvider, LLMRequest
+from app.services.context_budget_service import DEFAULT_MAX_STYLE_SOURCE_CHARS, generate_with_context_log, truncate_text
+from app.services.llm_provider import LLMProvider
 from app.services.store import now_utc
 
 
@@ -84,12 +85,16 @@ def generate_style_profile(db: Session, project_id: str, llm_provider: LLMProvid
     elif source.kind == "custom_text":
         if llm_provider is None:
             raise RuntimeError("LLM provider is required to generate Style Profile from custom text")
-        response = llm_provider.generate(
-            LLMRequest(
-                task_type="style_profile",
-                prompt=_custom_text_prompt(source.style_text or ""),
-                response_format="text",
-            )
+        response = generate_with_context_log(
+            llm_provider,
+            task_type="style_profile",
+            prompt=_custom_text_prompt(source.style_text or ""),
+            response_format="text",
+            db=db,
+            project_id=project_id,
+            step_type="style_profile",
+            source_item_count=1,
+            included_item_count=1,
         )
         profile_text = response.text.strip()
         if not profile_text:
@@ -108,12 +113,16 @@ def generate_style_profile(db: Session, project_id: str, llm_provider: LLMProvid
             .all()
         )
         scripts_material = "\n\n".join(f"# {file.filename}\n{file.markdown}" for file in files)
-        response = llm_provider.generate(
-            LLMRequest(
-                task_type="style_profile",
-                prompt=_reference_scripts_prompt(scripts_material),
-                response_format="text",
-            )
+        response = generate_with_context_log(
+            llm_provider,
+            task_type="style_profile",
+            prompt=_reference_scripts_prompt(scripts_material),
+            response_format="text",
+            db=db,
+            project_id=project_id,
+            step_type="style_profile",
+            source_item_count=len(files),
+            included_item_count=len(files),
         )
         profile_text = response.text.strip()
         if not profile_text:
@@ -141,8 +150,8 @@ def _replace_style_profile(db: Session, project_id: str, profile_text: str, sour
 
 
 def _custom_text_prompt(style_text: str) -> str:
-    return f"{CUSTOM_TEXT_SYSTEM_PROMPT}\n\n用户描述：\n{style_text}"
+    return f"{CUSTOM_TEXT_SYSTEM_PROMPT}\n\n用户描述：\n{truncate_text(style_text, DEFAULT_MAX_STYLE_SOURCE_CHARS)}"
 
 
 def _reference_scripts_prompt(scripts_material: str) -> str:
-    return f"{REFERENCE_SCRIPTS_SYSTEM_PROMPT}\n\n参考剧本：\n{scripts_material}"
+    return f"{REFERENCE_SCRIPTS_SYSTEM_PROMPT}\n\n参考剧本：\n{truncate_text(scripts_material, DEFAULT_MAX_STYLE_SOURCE_CHARS)}"

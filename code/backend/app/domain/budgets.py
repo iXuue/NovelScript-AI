@@ -1,6 +1,6 @@
 DEFAULT_PROJECT_BUDGET = {
     "max_chapters": 5,
-    "max_total_characters": 50000,
+    "max_total_characters": 2_000_000,
     "max_llm_calls": 120,
     "max_tool_calls": 200,
     "max_active_runs": 1,
@@ -14,4 +14,3 @@ DEFAULT_RUN_BUDGETS = {
     "validation_rerun": {"llm": 4, "tools": 10},
     "export": {"llm": 0, "tools": 10},
 }
-

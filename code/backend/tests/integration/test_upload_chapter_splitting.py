@@ -2,6 +2,7 @@ from app.core.database import get_db
 from app.models.chapter import Chapter, Paragraph
 from app.models.checkpoint import Checkpoint
 from app.models.project import Project
+from app.models.runtime import SourceFileRecord
 from app.services.store import STORE
 
 
@@ -46,10 +47,14 @@ def test_upload_persists_detected_chapters_and_paragraphs_to_database(client):
     try:
         chapters = db.query(Chapter).filter(Chapter.project_id == project_id).all()
         paragraphs = db.query(Paragraph).filter(Paragraph.project_id == project_id).all()
+        source_file = db.query(SourceFileRecord).filter(SourceFileRecord.project_id == project_id).one()
 
         assert [chapter.chapter_id for chapter in chapters] == ["CH001"]
         assert [paragraph.paragraph_id for paragraph in paragraphs] == ["CH001_P001", "CH001_P002"]
         assert [paragraph.text for paragraph in paragraphs] == ["她回来了。", "门开了。"]
+        assert source_file.purpose == "novel_upload"
+        assert source_file.filename == "novel.md"
+        assert source_file.character_count > 0
     finally:
         db.close()
 

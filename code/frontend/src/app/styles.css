@@ -761,33 +761,62 @@ select:disabled {
   letter-spacing: 0;
 }
 
-.figma-auth-user {
-  align-items: center;
-  color: rgba(117, 97, 91, 0.78);
-  display: flex;
-  flex-wrap: wrap;
-  font-size: 12px;
-  gap: 8px;
-  margin-top: 4px;
+.figma-workspace-account-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(255, 244, 238, 0.82)),
+    rgba(255, 250, 247, 0.78);
+  border: 1px solid rgba(234, 198, 184, 0.86);
+  border-radius: var(--studio-radius);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+  padding: 12px;
 }
 
-.figma-auth-user span {
-  max-width: 128px;
+.figma-workspace-account-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.figma-workspace-account-copy span {
+  color: rgba(117, 97, 91, 0.78);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.figma-workspace-account-copy strong {
+  color: var(--studio-ink);
+  display: block;
+  font-size: 15px;
+  font-weight: 780;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.figma-auth-user button {
-  background: transparent;
-  border: 0;
-  color: #a66152;
-  font-size: 12px;
-  font-weight: 720;
-  padding: 0;
+.figma-workspace-account-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.figma-auth-user button:hover {
+.figma-workspace-account-actions button {
+  background: rgba(255, 250, 247, 0.86);
+  border: 1px solid rgba(230, 193, 180, 0.88);
+  border-radius: var(--studio-radius);
+  color: #72473d;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 720;
+  min-height: 38px;
+  padding: 0 8px;
+}
+
+.figma-workspace-account-actions button:hover {
+  background: var(--studio-primary-soft);
+  border-color: var(--studio-line-strong);
   color: var(--studio-primary-strong);
 }
 

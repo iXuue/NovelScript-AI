@@ -18,7 +18,7 @@ def create_export_job(db, project_id: str, export_format: str) -> dict:
     target_dir = export_dir(project_id)
     target_dir.mkdir(parents=True, exist_ok=True)
     file_path = target_dir / f"{export_id}-{filename}"
-    _write_text_file(file_path, content)
+    _write_export_file(file_path, content)
     export = ExportJob(
         export_id=export_id,
         project_id=project_id,
@@ -53,5 +53,8 @@ def export_to_dict(export: ExportJob) -> dict:
     }
 
 
-def _write_text_file(path: Path, content: str) -> None:
+def _write_export_file(path: Path, content: str | bytes) -> None:
+    if isinstance(content, bytes):
+        path.write_bytes(content)
+        return
     path.write_text(content, encoding="utf-8")

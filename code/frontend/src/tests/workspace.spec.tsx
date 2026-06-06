@@ -160,6 +160,9 @@ test("login stores token and opens workspace", async () => {
   fireEvent.click(submit);
 
   await screen.findByLabelText("项目导航");
+  expect(screen.getByLabelText("用户登录信息")).toHaveTextContent("author");
+  expect(screen.getByRole("button", { name: "退出登录" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "切换账号" })).toBeInTheDocument();
   expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("login-token");
 });
 
@@ -174,7 +177,7 @@ test("register is the default auth action and opens workspace", async () => {
       if (method === "POST" && path === "/auth/register") {
         return jsonResponse({
           token: "register-token",
-          user: { user_id: "user_register", login_id: "new-author", created_at: "2026-06-06T00:00:00Z" }
+          user: { user_id: "user_register", login_id: "newauthor", created_at: "2026-06-06T00:00:00Z" }
         });
       }
       if (method === "GET" && path === "/projects") {
@@ -187,12 +190,13 @@ test("register is the default auth action and opens workspace", async () => {
 
   render(<App />);
   expect(screen.getByRole("tab", { name: "注册" })).toHaveAttribute("aria-selected", "true");
-  fireEvent.change(screen.getByLabelText("账号"), { target: { value: "new-author" } });
+  fireEvent.change(screen.getByLabelText("账号"), { target: { value: "newauthor" } });
   fireEvent.change(screen.getByLabelText("密码"), { target: { value: "password123" } });
   const submit = screen.getByRole("button", { name: "注册并进入" });
   await waitFor(() => expect(submit).toBeEnabled());
   fireEvent.click(submit);
 
   await screen.findByLabelText("项目导航");
+  expect(screen.getByLabelText("用户登录信息")).toHaveTextContent("newauthor");
   expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("register-token");
 });

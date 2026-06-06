@@ -19,6 +19,7 @@ import {
   getYamlPreview,
   listProjects,
   loginUser,
+  logoutUser,
   modifyScript,
   repairScenePlan,
   repairScriptScene,
@@ -108,6 +109,12 @@ function displayError(err: unknown): string {
     }
     if (err.code === "login_id_exists") {
       return "账号已存在；请直接登录或换一个账号。";
+    }
+    if (err.code === "invalid_login_id") {
+      return "账号需为 2-32 位中文、英文或数字，不能包含空格或符号。";
+    }
+    if (err.code === "invalid_password") {
+      return "密码需为 6-128 位。";
     }
     return err.code ? `${err.message} (${err.code})` : err.message;
   }
@@ -302,6 +309,7 @@ export default function App({ initialYaml }: AppProps) {
   }
 
   function handleLogout() {
+    void logoutUser().catch(() => undefined);
     window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setAuthToken(null);
     setAuthTokenValue(null);

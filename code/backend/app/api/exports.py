@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.services.export_job_service import create_export_job, get_export_job
 from app.services.project_service import require_project
-from app.services.run_service import create_project_run
+from app.services.run_service import create_project_run, update_run_status, update_run_step
 
 router = APIRouter()
 
@@ -39,7 +39,13 @@ def create_export_endpoint(
         export = create_export_job(db, project_id, payload.format)
     except PermissionError:
         raise api_error(409, "script_not_ready", "Script is not ready")
-    create_project_run(project_id, "export", "export", ["export"])
+    except ValueError as exc:
+        if str(exc) == "pdf_not_available":
+            raise api_error(400, "pdf_not_available", "PDF export is not available without a PDF renderer")
+        raise api_error(400, "validation_error", str(exc))
+    run = create_project_run(project_id, "export", "export", ["export"], db)
+    update_run_step(project_id, run["run_id"], "export", "succeeded", "Export completed", db)
+    update_run_status(run["run_id"], "succeeded", db=db)
     return export
 
 
@@ -57,6 +63,8 @@ def get_export_endpoint(
     export = get_export_job(db, project_id, export_id)
     if export is None:
         raise api_error(404, "export_not_found", "Export not found")
+    if export.status == "stale":
+        raise api_error(409, "export_stale", "Export is stale; create a new export from the current script")
     path = Path(export.file_path)
     if not path.exists():
         raise api_error(404, "export_file_not_found", "Export file not found")

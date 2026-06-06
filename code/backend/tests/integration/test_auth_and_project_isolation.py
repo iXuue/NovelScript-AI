@@ -41,6 +41,32 @@ def test_duplicate_login_and_wrong_password_return_errors(unauth_client):
     assert wrong_password.json()["error"]["code"] == "invalid_credentials"
 
 
+def test_register_accepts_chinese_english_digits_and_rejects_symbols(unauth_client):
+    registered = _register(unauth_client, "作者123")
+    assert registered["user"]["login_id"] == "作者123"
+    assert registered["user"]["user_id"] != registered["user"]["login_id"]
+
+    invalid_login = unauth_client.post("/auth/register", json={"login_id": "author-a", "password": "password123"})
+    assert invalid_login.status_code == 400
+    assert invalid_login.json()["error"]["code"] == "invalid_login_id"
+
+    invalid_password = unauth_client.post("/auth/register", json={"login_id": "author2", "password": "12345"})
+    assert invalid_password.status_code == 400
+    assert invalid_password.json()["error"]["code"] == "invalid_password"
+
+
+def test_logout_revokes_current_token(unauth_client):
+    registered = _register(unauth_client, "logoutuser")
+    headers = {"Authorization": f"Bearer {registered['token']}"}
+
+    logout = unauth_client.post("/auth/logout", headers=headers)
+    assert logout.status_code == 204
+
+    me = unauth_client.get("/auth/me", headers=headers)
+    assert me.status_code == 401
+    assert me.json()["error"]["code"] == "invalid_token"
+
+
 def test_passwords_and_tokens_are_hashed_and_unique_constraints_hold(unauth_client):
     session = _register(unauth_client, "author")
 
@@ -63,7 +89,7 @@ def test_passwords_and_tokens_are_hashed_and_unique_constraints_hold(unauth_clie
         db.add(
             User(
                 user_id=user_id,
-                login_id="another-author",
+                login_id="anotherauthor",
                 password_hash=password_hash,
                 password_salt=password_salt,
                 created_at=now_utc(),
@@ -104,8 +130,8 @@ def test_passwords_and_tokens_are_hashed_and_unique_constraints_hold(unauth_clie
 
 
 def test_projects_are_isolated_by_user_and_require_auth(unauth_client):
-    author_a = _register(unauth_client, "author-a")
-    author_b = _register(unauth_client, "author-b")
+    author_a = _register(unauth_client, "authora")
+    author_b = _register(unauth_client, "authorb")
     headers_a = {"Authorization": f"Bearer {author_a['token']}"}
     headers_b = {"Authorization": f"Bearer {author_b['token']}"}
 

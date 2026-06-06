@@ -4,8 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
 from app.api.errors import api_error
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.domain.artifacts import ProjectStage
+from app.models.runtime import SourceFileRecord
 from app.models.user import User
 from app.services.chapter_service import UploadedMarkdownDocument, assign_paragraph_ids, detect_documents_chapters
 from app.services.chapter_persistence_service import (
@@ -14,9 +16,9 @@ from app.services.chapter_persistence_service import (
     replace_project_chapters,
 )
 from app.services.checkpoint_service import create_checkpoint
-from app.services.input_adapter import normalize_to_markdown
+from app.services.input_adapter import normalize_to_markdown, parse_multipart_files
 from app.services.project_service import require_project, update_project_stage, update_project_stage_in_db
-from app.services.store import STORE
+from app.services.store import STORE, now_utc, persistent_id
 
 router = APIRouter()
 
@@ -30,17 +32,34 @@ async def upload_novel(
 ):
     try:
         require_project(project_id, db, current_user.user_id)
-        form = await request.form()
-        uploads = [item for item in [*form.getlist("files"), *form.getlist("file")] if hasattr(item, "read")]
+        uploads = parse_multipart_files(await request.body(), request.headers.get("content-type", ""))
         if not uploads:
             raise ValueError("file field is required")
+        settings = get_settings()
         documents = []
+        source_files = []
+        total_characters = 0
         for upload in uploads:
-            content = await upload.read()
+            markdown = normalize_to_markdown(upload.filename or "upload.txt", upload.content)
+            total_characters += len(markdown)
+            if total_characters > settings.max_upload_characters:
+                raise ValueError(f"upload exceeds max character budget: {settings.max_upload_characters}")
+            file_id = persistent_id("file")
+            source_files.append(
+                SourceFileRecord(
+                    file_id=file_id,
+                    project_id=project_id,
+                    purpose="novel_upload",
+                    filename=upload.filename or "upload.txt",
+                    content_type=getattr(upload, "content_type", None),
+                    character_count=len(markdown),
+                    created_at=now_utc(),
+                )
+            )
             documents.append(
                 UploadedMarkdownDocument(
                     filename=upload.filename or "upload.txt",
-                    markdown=normalize_to_markdown(upload.filename or "upload.txt", content),
+                    markdown=markdown,
                 )
             )
     except KeyError:
@@ -57,10 +76,13 @@ async def upload_novel(
         for chapter in chapters
     ]
     replace_project_chapters(db, project_id, chapters)
+    for source_file in source_files:
+        db.add(source_file)
+    db.commit()
     update_project_stage(project_id, ProjectStage.chapters_pending)
     update_project_stage_in_db(db, project_id, ProjectStage.chapters_pending)
     return {
-        "file_id": STORE.next_id("file"),
+        "file_id": source_files[0].file_id,
         "project_id": project_id,
         "stage": ProjectStage.chapters_pending,
         "detected_chapters": drafts,

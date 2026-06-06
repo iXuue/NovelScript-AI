@@ -90,6 +90,10 @@ export async function getCurrentUser(): Promise<AuthUser> {
   return requestJson<AuthUser>("/auth/me");
 }
 
+export async function logoutUser(): Promise<void> {
+  await requestJson<void>("/auth/logout", { method: "POST" });
+}
+
 export async function createProject(name: string): Promise<ProjectSummary> {
   return requestJson<ProjectSummary>("/projects", { method: "POST", body: JSON.stringify({ name }) });
 }

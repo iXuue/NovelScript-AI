@@ -22,5 +22,5 @@ def get_evidence_endpoint(
         require_project(project_id, db, current_user.user_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
-    return get_evidence_by_content_block(content_block_id)
+    return get_evidence_by_content_block(content_block_id, project_id, db)
 
