@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 
+import loginBackgroundVideo from "../assets/login-bg.mp4";
+
 type AuthMode = "login" | "register";
 
 type Props = {
@@ -26,6 +28,17 @@ export function AuthPane({ error, loading, onSubmit }: Props) {
 
   return (
     <main className="figma-auth-screen" aria-label="登录注册">
+      <video
+        aria-hidden="true"
+        autoPlay
+        className="figma-auth-video"
+        loop
+        muted
+        playsInline
+        preload="metadata"
+        src={loginBackgroundVideo}
+      />
+      <div className="figma-auth-video-tint" aria-hidden="true" />
       <section className="figma-auth-card">
         <div className="figma-auth-copy">
           <div className="figma-auth-brand">NovelScript AI</div>

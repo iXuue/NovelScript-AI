@@ -2129,30 +2129,62 @@ select:disabled {
   grid-template-columns: none;
   justify-content: center;
   overflow: auto;
-  padding: 28px;
+  padding: 0;
+  position: relative;
 }
 
 .figma-auth-screen {
   align-items: center;
   display: flex;
   justify-content: center;
-  min-height: min(680px, calc(100dvh - 56px));
+  min-height: 100dvh;
+  overflow: hidden;
+  padding: 28px;
+  position: relative;
   width: 100%;
 }
 
-.figma-auth-card {
+.figma-auth-video {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+  z-index: 0;
+}
+
+.figma-auth-video-tint {
   background:
-    radial-gradient(circle at 18% 8%, rgba(255, 214, 205, 0.74), transparent 34%),
-    radial-gradient(circle at 88% 90%, rgba(255, 241, 234, 0.92), transparent 42%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(255, 246, 241, 0.9));
-  border: 1px solid rgba(236, 216, 207, 0.95);
+    linear-gradient(90deg, rgba(255, 250, 247, 0.42), rgba(255, 242, 235, 0.18)),
+    radial-gradient(circle at 52% 45%, rgba(255, 255, 255, 0.08), transparent 48%);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+.figma-auth-card {
+  backdrop-filter: blur(18px) saturate(1.12);
+  background:
+    radial-gradient(circle at 16% 6%, rgba(255, 222, 215, 0.1), transparent 40%),
+    radial-gradient(circle at 86% 92%, rgba(255, 248, 244, 0.12), transparent 50%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 246, 241, 0.08));
+  border: 1px solid rgba(255, 250, 247, 0.3);
   border-radius: 12px;
-  box-shadow: 0 22px 58px rgba(124, 77, 62, 0.12);
+  box-shadow: 0 24px 70px rgba(78, 43, 32, 0.12);
   display: grid;
   gap: 18px;
   max-width: 430px;
   padding: 28px;
+  position: relative;
   width: min(100%, 430px);
+  z-index: 2;
+}
+
+@supports not (backdrop-filter: blur(18px)) {
+  .figma-auth-card {
+    background: rgba(255, 250, 247, 0.9);
+  }
 }
 
 .figma-auth-copy {
@@ -2182,8 +2214,8 @@ select:disabled {
 }
 
 .figma-auth-switch {
-  background: rgba(255, 248, 244, 0.74);
-  border: 1px solid rgba(236, 216, 207, 0.9);
+  background: rgba(255, 248, 244, 0.14);
+  border: 1px solid rgba(255, 250, 247, 0.26);
   border-radius: var(--studio-radius);
   display: grid;
   gap: 4px;
@@ -2203,8 +2235,8 @@ select:disabled {
 }
 
 .figma-auth-switch button.active {
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 6px 16px rgba(124, 77, 62, 0.08);
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 18px rgba(124, 77, 62, 0.08);
   color: var(--studio-ink);
 }
 
@@ -2225,8 +2257,8 @@ select:disabled {
 }
 
 .figma-auth-form input {
-  background: #fffaf7;
-  border: 1px solid rgba(236, 216, 207, 0.95);
+  background: rgba(255, 250, 247, 0.28);
+  border: 1px solid rgba(255, 250, 247, 0.32);
   border-radius: var(--studio-radius);
   color: var(--studio-ink);
   min-height: 44px;
@@ -2241,8 +2273,8 @@ select:disabled {
 }
 
 .figma-auth-password button {
-  background: rgba(255, 230, 221, 0.72);
-  border: 1px solid rgba(233, 130, 109, 0.32);
+  background: rgba(255, 230, 221, 0.2);
+  border: 1px solid rgba(255, 250, 247, 0.3);
   border-radius: var(--studio-radius);
   color: #6b3f36;
   font-size: 13px;
@@ -2272,6 +2304,10 @@ select:disabled {
 
 @media (max-width: 560px) {
   .figma-workspace.figma-auth-workspace {
+    padding: 0;
+  }
+
+  .figma-auth-screen {
     padding: 16px;
   }
 
