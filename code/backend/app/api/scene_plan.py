@@ -9,7 +9,7 @@ from app.models.user import User
 from app.services.llm_provider import LLMProvider, get_llm_provider
 from app.services.orchestrator_service import confirm_scene_plan, generate_scene_plan
 from app.services.project_service import require_project
-from app.services.scene_plan_service import get_current_scene_plan
+from app.services.scene_plan_service import get_current_scene_plan, repair_current_scene_plan
 
 router = APIRouter()
 
@@ -63,4 +63,21 @@ def confirm_scene_plan_endpoint(
         raise api_error(404, "scene_plan_not_found", "Scene Plan not found")
     except PermissionError:
         raise api_error(409, "scene_plan_validation_failed", "Scene Plan validation must pass before confirmation")
+
+
+@router.post("/projects/{project_id}/scene-plan/repair")
+def repair_scene_plan_endpoint(
+    project_id: str,
+    db: Session = Depends(get_db),
+    llm_provider: LLMProvider = Depends(get_llm_provider),
+):
+    try:
+        require_project(project_id)
+        return repair_current_scene_plan(db, project_id, llm_provider)
+    except KeyError:
+        raise api_error(404, "scene_plan_not_found", "Scene Plan not found")
+    except PermissionError as exc:
+        if str(exc) == "repair_attempts_exceeded":
+            raise api_error(409, "repair_attempts_exceeded", "Repair attempts exceeded")
+        raise api_error(409, "scene_plan_repair_not_required", "Scene Plan repair is not required")
 

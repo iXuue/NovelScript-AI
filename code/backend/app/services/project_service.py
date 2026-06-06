@@ -3,6 +3,12 @@ from app.models.project import Project
 from app.services.store import STORE, now_utc
 
 
+def _next_id(prefix: str, db) -> str:
+    if db is not None:
+        return f"{prefix}_{uuid.uuid4().hex[:8]}"
+    return STORE.next_id(prefix)
+
+
 def project_to_dict(project: Project) -> dict:
     return {
         "project_id": project.project_id,
@@ -23,9 +29,9 @@ def cache_project(project: dict) -> dict:
 
 
 def create_project(db=None, name: str = "未命名项目", user_id: str | None = None) -> dict:
-    project_id = STORE.next_id("proj")
-    conversation_id = STORE.next_id("conv")
-    session_id = STORE.next_id("sess")
+    project_id = _next_id("proj", db)
+    conversation_id = _next_id("conv", db)
+    session_id = _next_id("sess", db)
     created_at = now_utc()
     project = {
         "project_id": project_id,

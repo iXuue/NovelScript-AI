@@ -22,6 +22,8 @@ type Props = {
   onConfirmScenePlan: () => void;
   onGenerateScenePlan: () => void;
   onGenerateScript: () => void;
+  onRepairScenePlan: () => void;
+  onRepairScriptScene: (sceneId: string) => void;
 };
 
 function LegacyResultPane({
@@ -126,9 +128,13 @@ export function ResultPane({
   onConfirmScenePlan,
   onGenerateScenePlan,
   onGenerateScript,
+  onRepairScenePlan,
+  onRepairScriptScene,
   onExport
 }: Props) {
   const [evidenceBlockId, setEvidenceBlockId] = useState<string | null>(null);
+  void onRepairScenePlan;
+  void onRepairScriptScene;
 
   return (
     <aside className="figma-result-panel" aria-label="成果区">

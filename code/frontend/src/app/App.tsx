@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  ApiError,
+  ApiRequestError,
   confirmChapters,
   confirmScenePlan,
   createExport,
@@ -11,6 +11,7 @@ import {
   getActiveRun,
   getCurrentUser,
   getCurrentScriptForUi,
+  getExportDownloadUrl,
   getPendingChapters,
   getPrimaryMessages,
   getScenePlan,
@@ -19,6 +20,8 @@ import {
   listProjects,
   loginUser,
   modifyScript,
+  repairScenePlan,
+  repairScriptScene,
   registerUser,
   sendMessage,
   setAuthToken,
@@ -95,11 +98,11 @@ const CHAPTER_CONFIRMED_STAGES = new Set<ProjectStage>([
 ]);
 
 function isNotFound(err: unknown): boolean {
-  return err instanceof ApiError && err.status === 404;
+  return err instanceof ApiRequestError && err.status === 404;
 }
 
 function displayError(err: unknown): string {
-  if (err instanceof ApiError) {
+  if (err instanceof ApiRequestError) {
     return err.code ? `${err.message} (${err.code})` : err.message;
   }
   return err instanceof Error ? err.message : "操作失败";
@@ -112,6 +115,10 @@ async function optionalResource<T>(loader: () => Promise<T>): Promise<T | null> 
     if (isNotFound(err)) return null;
     throw err;
   }
+}
+
+function isApiErrorCode(error: unknown, code: string): boolean {
+  return error instanceof ApiRequestError && error.code === code;
 }
 
 export default function App({ initialYaml }: AppProps) {
@@ -471,12 +478,23 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject || !scenePlan) return;
     void runAction("正在确认场景计划", async () => {
       if (mode === "live") {
-        const response = await confirmScenePlan(activeProject.project_id, "button");
-        setStyleLocked(response.style_locked);
-        setScenePlan({ ...scenePlan, confirmed: true });
-        setScenePlanConfirmed(true);
-        setActiveProjectPatch({ stage: "scene_plan_confirmed" });
-        return;
+        try {
+          const response = await confirmScenePlan(activeProject.project_id, "button");
+          setStyleLocked(response.style_locked);
+          setScenePlan({ ...scenePlan, confirmed: true });
+          setScenePlanConfirmed(true);
+          setActiveProjectPatch({ stage: "scene_plan_confirmed" });
+          return;
+        } catch (err) {
+          if (isApiErrorCode(err, "scene_plan_validation_failed")) {
+            const current = await getScenePlan(activeProject.project_id).catch(() => scenePlan);
+            setScenePlan(current);
+            setScenePlanConfirmed(false);
+            setError("场景规划校验未通过，请先修复后再确认。");
+            return;
+          }
+          setMode("demo");
+        }
       }
       setStyleLocked(true);
       setScenePlan({ ...scenePlan, confirmed: true });
@@ -489,14 +507,28 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject || !scenePlan) return;
     void runAction("正在逐场生成剧本", async () => {
       if (mode === "live") {
-        await generateScript(activeProject.project_id);
-        const preview = await getYamlPreview(activeProject.project_id);
-        const ui = await getCurrentScriptForUi(activeProject.project_id);
-        setScriptPreview(preview);
-        setScriptForUi(ui);
-        setActiveProjectPatch({ stage: "script_ready" });
-        setViewMode("script");
-        return;
+        try {
+          await generateScript(activeProject.project_id);
+          const preview = await getYamlPreview(activeProject.project_id);
+          const ui = await getCurrentScriptForUi(activeProject.project_id);
+          setScriptPreview(preview);
+          setScriptForUi(ui);
+          setActiveProjectPatch({ stage: "script_ready" });
+          setViewMode("script");
+          return;
+        } catch (err) {
+          if (isApiErrorCode(err, "script_scene_validation_failed")) {
+            const ui = await getCurrentScriptForUi(activeProject.project_id).catch(() => null);
+            const preview = await getYamlPreview(activeProject.project_id).catch(() => null);
+            if (ui) setScriptForUi(ui);
+            if (preview) setScriptPreview(preview);
+            setActiveProjectPatch({ stage: "script_generating" });
+            setViewMode("script");
+            setError("剧本场景校验未通过，请修复失败场景后继续。");
+            return;
+          }
+          setMode("demo");
+        }
       }
       const generated = createDemoScript(activeProject.name, scenePlan);
       setScriptPreview(generated.preview);
@@ -527,6 +559,7 @@ export default function App({ initialYaml }: AppProps) {
       if (mode === "live") {
         const exported = await createExport(activeProject.project_id, format);
         setLatestExport(exported);
+        window.open(getExportDownloadUrl(exported.download_url), "_blank", "noopener,noreferrer");
         return;
       }
       setLatestExport({
@@ -535,6 +568,60 @@ export default function App({ initialYaml }: AppProps) {
         status: "succeeded",
         download_url: "#"
       });
+    });
+  }
+
+  function handleRepairScenePlan() {
+    if (!activeProject) return;
+    void runAction("正在修复场景规划", async () => {
+      if (mode === "live") {
+        try {
+          const repaired = await repairScenePlan(activeProject.project_id);
+          setScenePlan(repaired);
+          setScenePlanConfirmed(repaired.confirmed);
+          setActiveProjectPatch({ stage: "scene_plan_draft" });
+          setViewMode("scene-plan");
+          return;
+        } catch (err) {
+          if (isApiErrorCode(err, "repair_attempts_exceeded")) {
+            setError("修复次数已达到上限，请人工调整需求后重新生成。");
+            return;
+          }
+          if (isApiErrorCode(err, "scene_plan_repair_not_required")) {
+            setError("当前场景规划不需要修复。");
+            return;
+          }
+          setMode("demo");
+        }
+      }
+    });
+  }
+
+  function handleRepairScriptScene(sceneId: string) {
+    if (!activeProject) return;
+    void runAction("正在修复剧本场景", async () => {
+      if (mode === "live") {
+        try {
+          await repairScriptScene(activeProject.project_id, sceneId);
+          const ui = await getCurrentScriptForUi(activeProject.project_id);
+          const preview = await getYamlPreview(activeProject.project_id);
+          setScriptForUi(ui);
+          setScriptPreview(preview);
+          setActiveProjectPatch({ stage: ui.status === "current" ? "script_ready" : "script_generating" });
+          setViewMode("script");
+          return;
+        } catch (err) {
+          if (isApiErrorCode(err, "repair_attempts_exceeded")) {
+            setError("该场修复次数已达到上限，请人工调整后重新生成。");
+            return;
+          }
+          if (isApiErrorCode(err, "script_scene_repair_not_required")) {
+            setError("当前场景不需要修复。");
+            return;
+          }
+          setMode("demo");
+        }
+      }
     });
   }
 
@@ -653,6 +740,8 @@ export default function App({ initialYaml }: AppProps) {
           onExport={handleExport}
           onGenerateScenePlan={handleGenerateScenePlan}
           onGenerateScript={handleGenerateScript}
+          onRepairScenePlan={handleRepairScenePlan}
+          onRepairScriptScene={handleRepairScriptScene}
         />
       </div>
     </div>

@@ -27,23 +27,30 @@ type ApiErrorBody = {
   };
 };
 
-export class ApiError extends Error {
-  status: number;
+export function setAuthToken(token: string | null) {
+  authToken = token;
+}
+
+export class ApiRequestError extends Error {
   code: string;
   details: Record<string, unknown>;
+  status: number;
 
-  constructor(status: number, body: ApiErrorBody = {}) {
-    const message = body.error?.message ?? `Request failed: ${status}`;
+  constructor(message: string, code: string, status: number, details: Record<string, unknown> = {}) {
     super(message);
-    this.name = "ApiError";
+    this.name = "ApiRequestError";
+    this.code = code;
     this.status = status;
-    this.code = body.error?.code ?? "http_error";
-    this.details = body.error?.details ?? {};
+    this.details = details;
   }
 }
 
-export function setAuthToken(token: string | null) {
-  authToken = token;
+export class ApiError extends ApiRequestError {
+  constructor(status: number, body: ApiErrorBody = {}) {
+    const error = body.error;
+    super(error?.message ?? `Request failed: ${status}`, error?.code ?? "http_error", status, error?.details ?? {});
+    this.name = "ApiError";
+  }
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -169,6 +176,10 @@ export async function confirmScenePlan(
   });
 }
 
+export async function repairScenePlan(projectId: string): Promise<ScenePlan> {
+  return requestJson<ScenePlan>(`/projects/${projectId}/scene-plan/repair`, { method: "POST" });
+}
+
 export async function generateScript(projectId: string): Promise<{ run_id: string; status: RunStatus; stage: string }> {
   return requestJson(`/projects/${projectId}/scripts/generate`, { method: "POST" });
 }
@@ -179,6 +190,13 @@ export async function getCurrentScriptForUi(projectId: string): Promise<ScriptCu
 
 export async function getYamlPreview(projectId: string): Promise<ScriptPreview> {
   return requestJson<ScriptPreview>(`/projects/${projectId}/scripts/current/yaml-preview`);
+}
+
+export async function repairScriptScene(
+  projectId: string,
+  sceneId: string
+): Promise<{ script_version_id: string; scene_id: string; validation: NonNullable<ScriptCurrentForUi["scenes"][number]["validation"]> }> {
+  return requestJson(`/projects/${projectId}/scripts/scenes/${sceneId}/repair`, { method: "POST" });
 }
 
 export async function getPrimaryMessages(projectId: string): Promise<{
@@ -221,6 +239,13 @@ export async function createExport(
   format: ExportFormat
 ): Promise<ExportResult> {
   return requestJson(`/projects/${projectId}/exports`, { method: "POST", body: JSON.stringify({ format }) });
+}
+
+export function getExportDownloadUrl(downloadUrl: string): string {
+  if (downloadUrl.startsWith("http://") || downloadUrl.startsWith("https://")) {
+    return downloadUrl;
+  }
+  return `${API_BASE_URL}${downloadUrl}`;
 }
 
 export async function getActiveRun(projectId: string): Promise<AgentProgress | null> {

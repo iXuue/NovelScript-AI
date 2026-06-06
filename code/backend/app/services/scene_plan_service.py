@@ -6,13 +6,14 @@ from sqlalchemy.orm import Session
 from app.domain.artifacts import ArtifactStatus, ProjectStage
 from app.models.analysis import ChapterSummary, EvidenceItem
 from app.models.chapter import Chapter
+from app.models.repair import RepairAttempt
 from app.models.scene_plan import ScenePlan, ScenePlanScene, ScenePlanValidation
 from app.models.story import StoryBible
 from app.models.style import StyleProfile
 from app.services.checkpoint_service import create_checkpoint
 from app.services.llm_provider import LLMProvider, LLMRequest
 from app.services.project_service import update_project_stage, update_project_stage_in_db
-from app.services.store import STORE, now_utc
+from app.services.store import STORE, now_utc, persistent_id
 from app.services.style_service import lock_style_source
 
 
@@ -35,6 +36,7 @@ LIST_FIELDS = [
     "must_keep_visual_elements",
     "must_keep_foreshadowing",
 ]
+MAX_REPAIR_ATTEMPTS = 2
 
 
 def generate_scene_plan_artifact(db: Session, project_id: str, llm_provider: LLMProvider | None) -> dict:
@@ -76,6 +78,59 @@ def get_current_scene_plan(db: Session, project_id: str) -> dict | None:
     if scene_plan is None:
         return None
     return scene_plan_to_dict(scene_plan)
+
+
+def repair_current_scene_plan(db: Session, project_id: str, llm_provider: LLMProvider | None) -> dict:
+    scene_plan = (
+        db.query(ScenePlan)
+        .filter(ScenePlan.project_id == project_id, ScenePlan.status == ArtifactStatus.current)
+        .one_or_none()
+    )
+    if scene_plan is None:
+        raise KeyError("scene_plan_missing")
+    validation = _latest_validation(scene_plan)
+    if validation is None or validation.passed:
+        raise PermissionError("scene_plan_repair_not_required")
+    if _repair_attempt_count(db, project_id=project_id, artifact_type="scene_plan", artifact_id=None, scene_id=None) >= MAX_REPAIR_ATTEMPTS:
+        raise PermissionError("repair_attempts_exceeded")
+    if llm_provider is None:
+        raise RuntimeError("LLM provider is required to repair Scene Plan")
+
+    chapters = _confirmed_chapters(db, project_id)
+    summaries = _chapter_summaries(db, project_id)
+    evidence_items = _evidence_items(db, project_id)
+    story_bible = _story_bible(db, project_id)
+    if story_bible is None:
+        raise RuntimeError("scene_plan repair requires story_bible")
+
+    response = llm_provider.generate(
+        LLMRequest(
+            task_type="scene_plan_repair",
+            prompt=_scene_plan_repair_prompt(scene_plan, validation, chapters, summaries, evidence_items, story_bible),
+            response_format="json",
+        )
+    )
+    payload = _validate_scene_plan_payload(
+        _load_json_object(response.text),
+        chapter_ids={chapter.chapter_id for chapter in chapters},
+        evidence_ids={evidence.evidence_id for evidence in evidence_items},
+    )
+    previous_scene_plan_id = scene_plan.scene_plan_id
+    repaired = _replace_scene_plan(db, project_id, payload["scenes"], response.model_name)
+    repaired_validation = _validate_and_store_scene_plan(db, repaired, chapters, summaries, evidence_items, story_bible, llm_provider)
+    _record_repair_attempt(
+        db,
+        project_id=project_id,
+        artifact_type="scene_plan",
+        artifact_id=previous_scene_plan_id,
+        result_artifact_id=repaired.scene_plan_id,
+        scene_id=None,
+        issues=validation.issues,
+        status="success" if repaired_validation.passed else "failed",
+        source=response.model_name,
+    )
+    STORE.scene_plans[project_id] = scene_plan_to_dict(repaired)
+    return scene_plan_to_dict(repaired)
 
 
 def confirm_current_scene_plan(db: Session, project_id: str, confirmation_source: str, message_id: str | None = None) -> dict:
@@ -145,7 +200,7 @@ def _replace_scene_plan(db: Session, project_id: str, scenes: list[dict], source
     db.execute(delete(ScenePlan).where(ScenePlan.project_id == project_id))
     timestamp = now_utc()
     scene_plan = ScenePlan(
-        scene_plan_id=STORE.next_id("sp"),
+        scene_plan_id=persistent_id("sp"),
         project_id=project_id,
         status=ArtifactStatus.current,
         confirmed=False,
@@ -285,6 +340,33 @@ def _scene_plan_validation_prompt(
         f"evidence_index:\n{_evidence_block(evidence_items)}\n\n"
         f"story_bible:\n{_story_bible_block(story_bible)}\n\n"
         f"scene_plan:\n{json.dumps(scene_plan_to_dict_without_validation(scene_plan), ensure_ascii=False)}"
+    )
+
+
+def _scene_plan_repair_prompt(
+    scene_plan: ScenePlan,
+    validation: ScenePlanValidation,
+    chapters: list[Chapter],
+    summaries: list[ChapterSummary],
+    evidence_items: list[EvidenceItem],
+    story_bible: StoryBible,
+) -> str:
+    return (
+        "You are the Scene Plan Repair Worker. Repair the current scene plan according to validation issues.\n"
+        "Return the full repaired Scene Plan as one JSON object. No Markdown. No explanation.\n"
+        "Use the same schema as Scene Plan generation: {\"scenes\":[...]}.\n"
+        "Rules:\n"
+        "- Preserve valid scene plan material when possible.\n"
+        "- Fix only issues identified by validation unless required for consistency.\n"
+        "- Reuse existing chapter_ids and evidence_ids only.\n"
+        "- Do not invent unsupported facts.\n\n"
+        f"validation_issues:\n{json.dumps(validation.issues, ensure_ascii=False)}\n\n"
+        f"validation_suggestions:\n{json.dumps(validation.suggestions, ensure_ascii=False)}\n\n"
+        f"current_scene_plan:\n{json.dumps(scene_plan_to_dict_without_validation(scene_plan), ensure_ascii=False)}\n\n"
+        f"confirmed_chapters:\n{_chapter_block(chapters)}\n\n"
+        f"chapter_summaries:\n{_summary_block(summaries)}\n\n"
+        f"evidence_index:\n{_evidence_block(evidence_items)}\n\n"
+        f"story_bible:\n{_story_bible_block(story_bible)}"
     )
 
 
@@ -479,3 +561,59 @@ def _validation_to_dict(validation: ScenePlanValidation) -> dict:
         "source": validation.source,
         "created_at": validation.created_at,
     }
+
+
+def _record_repair_attempt(
+    db: Session,
+    project_id: str,
+    artifact_type: str,
+    artifact_id: str,
+    result_artifact_id: str | None,
+    scene_id: str | None,
+    issues: list,
+    status: str,
+    source: str,
+) -> RepairAttempt:
+    attempt_no = (
+        db.query(RepairAttempt)
+        .filter(
+            RepairAttempt.project_id == project_id,
+            RepairAttempt.artifact_type == artifact_type,
+            RepairAttempt.artifact_id == artifact_id,
+            RepairAttempt.scene_id == scene_id,
+        )
+        .count()
+        + 1
+    )
+    attempt = RepairAttempt(
+        project_id=project_id,
+        artifact_type=artifact_type,
+        artifact_id=artifact_id,
+        result_artifact_id=result_artifact_id,
+        scene_id=scene_id,
+        attempt_no=attempt_no,
+        issues=issues,
+        status=status,
+        source=source,
+        created_at=now_utc(),
+    )
+    db.add(attempt)
+    db.commit()
+    return attempt
+
+
+def _repair_attempt_count(
+    db: Session,
+    project_id: str,
+    artifact_type: str,
+    artifact_id: str | None,
+    scene_id: str | None,
+) -> int:
+    query = db.query(RepairAttempt).filter(
+        RepairAttempt.project_id == project_id,
+        RepairAttempt.artifact_type == artifact_type,
+        RepairAttempt.scene_id == scene_id,
+    )
+    if artifact_id is not None:
+        query = query.filter(RepairAttempt.artifact_id == artifact_id)
+    return query.count()

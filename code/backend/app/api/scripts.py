@@ -8,7 +8,7 @@ from app.models.user import User
 from app.services.llm_provider import LLMProvider, get_llm_provider
 from app.services.orchestrator_service import generate_script
 from app.services.project_service import require_project
-from app.services.script_service import get_current_script_for_ui, get_current_yaml_preview
+from app.services.script_service import get_current_script_for_ui, get_current_yaml_preview, repair_script_scene
 
 router = APIRouter()
 
@@ -61,4 +61,24 @@ def get_yaml_preview_endpoint(
     if preview is None:
         raise api_error(404, "script_not_found", "Script not found")
     return preview
+
+
+@router.post("/projects/{project_id}/scripts/scenes/{scene_id}/repair")
+def repair_script_scene_endpoint(
+    project_id: str,
+    scene_id: str,
+    db: Session = Depends(get_db),
+    llm_provider: LLMProvider = Depends(get_llm_provider),
+):
+    try:
+        require_project(project_id)
+        return repair_script_scene(db, project_id, scene_id, llm_provider)
+    except KeyError:
+        raise api_error(404, "script_scene_not_found", "Script scene not found")
+    except PermissionError as exc:
+        if str(exc) == "repair_attempts_exceeded":
+            raise api_error(409, "repair_attempts_exceeded", "Repair attempts exceeded")
+        if str(exc) == "script_scene_repair_not_required":
+            raise api_error(409, "script_scene_repair_not_required", "Script scene repair is not required")
+        raise api_error(409, "scene_plan_not_confirmed", "Scene Plan must be confirmed before script repair")
 

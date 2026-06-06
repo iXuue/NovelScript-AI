@@ -101,19 +101,36 @@ export type ScenePlan = {
   scene_plan_id: string;
   status: ArtifactStatus;
   confirmed: boolean;
-  scenes: Array<{
-    scene_id: string;
-    order: number;
-    title: string;
-    source_chapter_ids: string[];
-    source_evidence_ids: string[];
-    location?: string;
-    time?: string;
-    characters: string[];
-    scene_function: string;
-    core_conflict: string;
-    adaptation_note: string;
-  }>;
+  validation?: ScenePlanValidation | null;
+  scenes: ScenePlanScene[];
+};
+
+export type ScenePlanValidation = {
+  passed: boolean;
+  issues: Array<{ code?: string; message: string }>;
+  suggestions: string[];
+  coverage: Record<string, string[]>;
+  source: string;
+  created_at: string;
+};
+
+export type ScenePlanScene = {
+  scene_id: string;
+  order: number;
+  title: string;
+  source_chapter_ids: string[];
+  source_evidence_ids: string[];
+  interior_exterior: string;
+  location: string;
+  time: string;
+  characters: string[];
+  must_cover_plot: string[];
+  must_keep_dialogue: string[];
+  must_keep_visual_elements: string[];
+  must_keep_foreshadowing: string[];
+  scene_function: string;
+  core_conflict: string;
+  adaptation_note: string;
 };
 
 export type ScriptPreview = {
@@ -127,13 +144,36 @@ export type ScriptCurrentForUi = {
   script_version_id: string;
   status: ArtifactStatus;
   generated_at: string;
-  content_blocks: Array<{
-    content_block_id: string;
+  scenes: Array<{
     scene_id: string;
-    block_type: string;
-    display_label: string;
-    source_evidence_ids: string[];
+    title: string;
+    source_chapter_ids: string[];
+    scene_info: string;
+    characters: string[];
+    scene_purpose: string;
+    core_conflict: string;
+    validation?: ScriptSceneValidation | null;
   }>;
+  content_blocks: ScriptContentBlock[];
+};
+
+export type ScriptSceneValidation = {
+  passed: boolean;
+  issues: Array<{ code?: string; message: string }>;
+  suggestions: string[];
+  coverage: Record<string, string[]>;
+  source: string;
+  created_at: string;
+};
+
+export type ScriptContentBlock = {
+  content_block_id: string;
+  scene_id: string;
+  block_type: "action" | "dialogue" | "narration" | "transition" | "note";
+  display_label: string;
+  text?: string;
+  speaker?: string | null;
+  source_evidence_ids: string[];
 };
 
 export type EvidenceLookupResult = {
@@ -144,6 +184,14 @@ export type EvidenceLookupResult = {
     paragraph_id: string;
     text: string;
   }>;
+};
+
+export type ExportResult = {
+  export_id: string;
+  format: "yaml" | "markdown" | "docx" | "pdf" | "txt" | "clean_json";
+  status: "succeeded" | "failed";
+  filename?: string;
+  download_url: string;
 };
 ```
 
@@ -410,6 +458,7 @@ No Prompt, tool parameters, tool returns, or developer run logs are returned by 
 ```text
 POST /projects/{project_id}/scene-plan/generate
 GET /projects/{project_id}/scene-plan
+POST /projects/{project_id}/scene-plan/repair
 POST /projects/{project_id}/scene-plan/confirm
 ```
 
@@ -430,6 +479,14 @@ POST /projects/{project_id}/scene-plan/confirm
   "scene_plan_id": "sp_001",
   "status": "current",
   "confirmed": false,
+  "validation": {
+    "passed": true,
+    "issues": [],
+    "suggestions": [],
+    "coverage": {},
+    "source": "validator",
+    "created_at": "2026-06-05T13:18:00+08:00"
+  },
   "scenes": [
     {
       "scene_id": "S001",
@@ -437,15 +494,32 @@ POST /projects/{project_id}/scene-plan/confirm
       "title": "雨夜归来",
       "source_chapter_ids": ["CH001"],
       "source_evidence_ids": ["EV001"],
+      "interior_exterior": "外景",
       "location": "旧宅门口",
       "time": "夜",
       "characters": ["林雨"],
+      "must_cover_plot": ["林雨在雨夜回到旧宅门口"],
+      "must_keep_dialogue": ["我回来了。"],
+      "must_keep_visual_elements": ["雨夜", "旧宅门口"],
+      "must_keep_foreshadowing": ["门缝里的灯光"],
       "scene_function": "建立人物回归",
       "core_conflict": "林雨是否进入旧宅",
       "adaptation_note": "保留雨夜视觉元素"
     }
   ]
 }
+```
+
+`POST /projects/{project_id}/scene-plan/repair` response is the same shape as `GET /projects/{project_id}/scene-plan`.
+
+Repair rules:
+
+```text
+Repair is allowed only when the current Scene Plan validation exists and passed=false.
+Each Scene Plan can be repaired at most 2 times.
+If validation passed, returns 409 scene_plan_repair_not_required.
+If repair attempts are exhausted, returns 409 repair_attempts_exceeded.
+The repaired Scene Plan is revalidated before being returned.
 ```
 
 `POST /projects/{project_id}/scene-plan/confirm` request:
@@ -469,12 +543,21 @@ Response:
 }
 ```
 
+Confirm rules:
+
+```text
+Scene Plan confirmation requires the current Scene Plan validation to pass.
+If validation failed, returns 409 scene_plan_validation_failed.
+After confirmation, style source becomes locked and project stage becomes scene_plan_confirmed.
+```
+
 #### Script APIs
 
 ```text
 POST /projects/{project_id}/scripts/generate
 GET /projects/{project_id}/scripts/current
 GET /projects/{project_id}/scripts/current/yaml-preview
+POST /projects/{project_id}/scripts/scenes/{scene_id}/repair
 ```
 
 `POST /projects/{project_id}/scripts/generate` response:
@@ -494,12 +577,33 @@ GET /projects/{project_id}/scripts/current/yaml-preview
   "script_version_id": "script_v001",
   "status": "current",
   "generated_at": "2026-06-05T13:20:00+08:00",
+  "scenes": [
+    {
+      "scene_id": "S001",
+      "title": "雨夜归来",
+      "source_chapter_ids": ["CH001"],
+      "scene_info": "外景 / 旧宅门口 / 夜",
+      "characters": ["林雨"],
+      "scene_purpose": "建立人物回归",
+      "core_conflict": "林雨是否进入旧宅",
+      "validation": {
+        "passed": true,
+        "issues": [],
+        "suggestions": [],
+        "coverage": {},
+        "source": "validator",
+        "created_at": "2026-06-05T13:21:00+08:00"
+      }
+    }
+  ],
   "content_blocks": [
     {
       "content_block_id": "CB001",
       "scene_id": "S001",
       "block_type": "dialogue",
       "display_label": "S001 对白 1",
+      "text": "我回来了。",
+      "speaker": "林雨",
       "source_evidence_ids": ["EV001"]
     }
   ]
@@ -513,6 +617,7 @@ This endpoint is UI support for traceability buttons.
 It must not expose developer Prompt, tool parameters, tool returns, or local run logs.
 It may expose content_block_id and source_evidence_ids because the page needs them for evidence lookup.
 Export endpoints must remove these internal IDs.
+If script generation produced a failed version, this UI endpoint may return the latest failed version so the frontend can display validation issues and trigger repair.
 ```
 
 `GET /projects/{project_id}/scripts/current/yaml-preview` response:
@@ -532,7 +637,35 @@ Rules:
 YAML preview is read-only.
 Frontend never PATCHes YAML.
 Script generation before Scene Plan confirmation returns 409 scene_plan_not_confirmed.
+If any generated scene fails validation, generation stores a failed script version and returns 409 script_scene_validation_failed.
 Frontend calls POST /projects/{project_id}/scripts/generate after Scene Plan confirmation.
+```
+
+`POST /projects/{project_id}/scripts/scenes/{scene_id}/repair` response:
+
+```json
+{
+  "script_version_id": "script_v001",
+  "scene_id": "S001",
+  "validation": {
+    "passed": true,
+    "issues": [],
+    "suggestions": [],
+    "coverage": {},
+    "source": "validator",
+    "created_at": "2026-06-05T13:23:00+08:00"
+  }
+}
+```
+
+Repair rules:
+
+```text
+Repair is allowed only when the latest script version has a failed validation for that scene.
+Each script scene can be repaired at most 2 times.
+If the scene validation passed, returns 409 script_scene_repair_not_required.
+If repair attempts are exhausted, returns 409 repair_attempts_exceeded.
+After repair, the scene is revalidated. When all script scenes pass, the script version status becomes current and project stage becomes script_ready.
 ```
 
 #### Conversation APIs
@@ -672,21 +805,16 @@ Response:
   "export_id": "exp_001",
   "format": "yaml",
   "status": "succeeded",
+  "filename": "proj_001.yaml",
   "download_url": "/projects/proj_001/exports/exp_001"
 }
 ```
 
 `GET /projects/{project_id}/exports/{export_id}` response:
 
-```json
-{
-  "export_id": "exp_001",
-  "project_id": "proj_001",
-  "format": "yaml",
-  "status": "succeeded",
-  "download_url": "/projects/proj_001/exports/exp_001",
-  "created_at": "2026-06-05T13:30:00+08:00"
-}
+```text
+File download response.
+Content-Disposition includes the generated filename.
 ```
 
 Rules:
@@ -694,6 +822,8 @@ Rules:
 ```text
 Export reads current internal JSON from PostgreSQL.
 Export removes content_block_id, source evidence IDs, paragraph IDs, and traceability_index.
+yaml, markdown, docx, pdf, and txt exports serialize the current script as YAML-format content for the MVP.
+clean_json exports the cleaned script JSON without traceability-only fields.
 DOC is not supported in MVP.
 Export run uses 0 LLM calls.
 ```
@@ -713,14 +843,17 @@ export async function clearStyleSource(projectId: string): Promise<void>;
 export async function getRun(projectId: string, runId: string): Promise<AgentProgress>;
 export async function generateScenePlan(projectId: string): Promise<{ run_id: string; scene_plan_id: string; status: RunStatus }>;
 export async function getScenePlan(projectId: string): Promise<ScenePlan>;
+export async function repairScenePlan(projectId: string): Promise<ScenePlan>;
 export async function confirmScenePlan(projectId: string, source: "button" | "conversation", messageId?: string): Promise<{ checkpoint_id: string; style_locked: boolean }>;
 export async function generateScript(projectId: string): Promise<{ run_id: string; status: RunStatus; stage: string }>;
 export async function getCurrentScriptForUi(projectId: string): Promise<ScriptCurrentForUi>;
 export async function getYamlPreview(projectId: string): Promise<ScriptPreview>;
+export async function repairScriptScene(projectId: string, sceneId: string): Promise<{ script_version_id: string; scene_id: string; validation: ScriptSceneValidation }>;
 export async function sendMessage(projectId: string, content: string): Promise<{ message_id: string; role: "user" | "assistant"; content: string; created_at: string }>;
 export async function modifyScript(projectId: string, message: string, target: { type: "scene" | "chapter" | "script"; scene_id?: string; chapter_id?: string }): Promise<{ run_id: string; status: RunStatus; stage: string }>;
 export async function getEvidenceByContentBlock(projectId: string, contentBlockId: string): Promise<EvidenceLookupResult>;
-export async function createExport(projectId: string, format: "yaml" | "markdown" | "docx" | "pdf" | "txt" | "clean_json"): Promise<{ export_id: string; format: string; status: string; download_url: string }>;
+export async function createExport(projectId: string, format: "yaml" | "markdown" | "docx" | "pdf" | "txt" | "clean_json"): Promise<ExportResult>;
+export function getExportDownloadUrl(downloadUrl: string): string;
 export async function getActiveRun(projectId: string): Promise<AgentProgress | null>;
 ```
 
@@ -730,9 +863,10 @@ Frontend collaboration rules:
 All frontend components call backend only through api/client.ts.
 Frontend stores no business authority copy of Scene Plan, script JSON, or traceability_index.
 Frontend displays YAML as read-only text from getYamlPreview().
-Frontend uses getCurrentScriptForUi() only to place evidence buttons and locate content_block_id markers.
+Frontend uses getCurrentScriptForUi() only to show script scene validation, place evidence buttons, and locate content_block_id markers.
 Frontend evidence buttons pass content_block_id to getEvidenceByContentBlock().
-Frontend must handle 409 scene_plan_not_confirmed, style_source_locked, and scene_plan_change_required.
+Frontend must open getExportDownloadUrl(result.download_url) after createExport().
+Frontend must handle 409 scene_plan_not_confirmed, style_source_locked, scene_plan_change_required, scene_plan_validation_failed, script_scene_validation_failed, scene_plan_repair_not_required, script_scene_repair_not_required, and repair_attempts_exceeded.
 ```
 
 ---

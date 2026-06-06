@@ -48,9 +48,14 @@ export function createDemoScenePlan(chapters: ChapterDraft[]): ScenePlan {
       title: chapter.title.replace(/^第.+?章\s*/, "") || chapter.title,
       source_chapter_ids: [chapter.chapter_id],
       source_evidence_ids: [`EV${String(index + 1).padStart(3, "0")}`],
+      interior_exterior: "内景",
       location: "待定地点",
       time: "待定时间",
       characters: index === 0 ? ["主要角色"] : ["主要角色", "关联角色"],
+      must_cover_plot: [],
+      must_keep_dialogue: [],
+      must_keep_visual_elements: [],
+      must_keep_foreshadowing: [],
       scene_function: index === 0 ? "建立开场信息与人物动机" : "推进人物关系与核心冲突",
       core_conflict: index === 0 ? "主要角色是否采取行动" : "角色之间的目标是否发生冲突",
       adaptation_note: "保留原文章节核心信息，压缩为可拍摄场景。"
@@ -63,12 +68,24 @@ export function createDemoScript(projectName: string, scenePlan: ScenePlan): {
   scriptForUi: ScriptCurrentForUi;
   evidence: Record<string, EvidenceLookupResult>;
 } {
+  const scenes = scenePlan.scenes.map((scene) => ({
+    scene_id: scene.scene_id,
+    title: scene.title,
+    source_chapter_ids: scene.source_chapter_ids,
+    scene_info: `${scene.interior_exterior} / ${scene.location} / ${scene.time}`,
+    characters: scene.characters,
+    scene_purpose: scene.scene_function,
+    core_conflict: scene.core_conflict,
+  }));
+
   const contentBlocks = scenePlan.scenes.map((scene, index) => ({
     content_block_id: `CB${String(index + 1).padStart(3, "0")}`,
     scene_id: scene.scene_id,
-    block_type: "action",
+    block_type: "action" as const,
     display_label: `${scene.scene_id} 动作 1`,
-    source_evidence_ids: scene.source_evidence_ids
+    text: index === 0 ? "主要角色停在关键地点，行动即将开始。" : "沉默被一句追问打破，冲突继续推进。",
+    speaker: null,
+    source_evidence_ids: scene.source_evidence_ids,
   }));
 
   const yamlScenes = scenePlan.scenes
@@ -120,6 +137,7 @@ ${yamlScenes}
       script_version_id: `script_demo_${Date.now()}`,
       status: "current",
       generated_at: nowIso(),
+      scenes,
       content_blocks: contentBlocks
     },
     evidence

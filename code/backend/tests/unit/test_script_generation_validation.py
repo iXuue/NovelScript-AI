@@ -31,14 +31,14 @@ def test_dialogue_block_requires_speaker():
         _validate_script_scene_payload(payload, SceneStub(), {"EV001"})
 
 
-def test_parenthetical_and_voiceover_are_not_valid_block_types():
+def test_invalid_block_type_is_rejected():
     payload = {
         "scene_id": "S001",
         "title": "雨夜归来",
         "content_blocks": [
             {
                 "content_block_id": "CB001",
-                "type": "voiceover",
+                "type": "not_a_real_type",
                 "text": "她想起那封旧信。",
                 "speaker": None,
                 "source_evidence_ids": ["EV001"],
