@@ -129,6 +129,70 @@ test("custom style text disables reference script upload", async () => {
   expect(screen.getByLabelText("上传历史剧本参考")).toBeDisabled();
 });
 
+test("confirming chapters reveals the scene plan generation action when style is selected", async () => {
+  let confirmCalled = false;
+  const project = {
+    project_id: "proj_ready",
+    user_id: "user_workspace",
+    name: "待生成项目",
+    stage: "chapters_pending",
+    primary_conversation_id: "conv_ready",
+    active_session_id: "sess_ready",
+    created_at: "2026-06-06T00:00:00Z",
+    updated_at: "2026-06-06T00:00:00Z"
+  };
+
+  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "workspace-token");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const path = url.pathname;
+
+      if (method === "GET" && path === "/auth/me") {
+        return jsonResponse({ user_id: "user_workspace", login_id: "workspace", created_at: "2026-06-06T00:00:00Z" });
+      }
+      if (method === "GET" && path === "/projects") return jsonResponse([project]);
+      if (method === "GET" && path === "/projects/proj_ready/conversations/primary/messages") {
+        return jsonResponse({ conversation_id: "conv_ready", messages: [] });
+      }
+      if (method === "GET" && path === "/projects/proj_ready/style-source") {
+        return jsonResponse({
+          project_id: "proj_ready",
+          style_source: { kind: "builtin", builtin_style: "suspense" },
+          style_locked: false
+        });
+      }
+      if (method === "GET" && path === "/projects/proj_ready/chapters/pending") {
+        return jsonResponse({ chapters: [{ chapter_id: "CH001", order: 1, title: "第一章", paragraph_count: 2 }] });
+      }
+      if (method === "POST" && path === "/projects/proj_ready/chapters/confirm") {
+        confirmCalled = true;
+        return jsonResponse({ project_id: "proj_ready", stage: "chapters_confirmed", checkpoint_id: "chk_ready" });
+      }
+      if (method === "GET" && path === "/projects/proj_ready/scene-plan") {
+        return jsonResponse({ error: { code: "scene_plan_not_found", message: "Scene Plan not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_ready/scripts/current/yaml-preview") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_ready/scripts/current") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_ready/runs/active") return jsonResponse(null);
+
+      return jsonResponse({ error: { code: "not_mocked", message: `${method} ${path}`, details: {} } }, 500);
+    })
+  );
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "确认章节" }));
+
+  await screen.findByRole("button", { name: "开始生成 Scene Plan" });
+  expect(confirmCalled).toBe(true);
+});
+
 test("login stores token and opens workspace", async () => {
   vi.stubGlobal(
     "fetch",
@@ -152,6 +216,7 @@ test("login stores token and opens workspace", async () => {
   );
 
   render(<App />);
+  fireEvent.click(screen.getByRole("tab", { name: "登录" }));
   fireEvent.change(screen.getByLabelText("账号"), { target: { value: "author" } });
   fireEvent.change(screen.getByLabelText("密码"), { target: { value: "password123" } });
   const submit = screen.getByRole("button", { name: "登录" });
@@ -159,5 +224,43 @@ test("login stores token and opens workspace", async () => {
   fireEvent.click(submit);
 
   await screen.findByLabelText("项目导航");
+  expect(screen.getByLabelText("用户登录信息")).toHaveTextContent("author");
+  expect(screen.getByRole("button", { name: "退出登录" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "切换账号" })).toBeInTheDocument();
   expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("login-token");
+});
+
+test("register is the default auth action and opens workspace", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const path = url.pathname;
+
+      if (method === "POST" && path === "/auth/register") {
+        return jsonResponse({
+          token: "register-token",
+          user: { user_id: "user_register", login_id: "newauthor", created_at: "2026-06-06T00:00:00Z" }
+        });
+      }
+      if (method === "GET" && path === "/projects") {
+        expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer register-token");
+        return jsonResponse([]);
+      }
+      return jsonResponse({ error: { code: "not_mocked", message: `${method} ${path}`, details: {} } }, 500);
+    })
+  );
+
+  render(<App />);
+  expect(screen.getByRole("tab", { name: "注册" })).toHaveAttribute("aria-selected", "true");
+  fireEvent.change(screen.getByLabelText("账号"), { target: { value: "newauthor" } });
+  fireEvent.change(screen.getByLabelText("密码"), { target: { value: "password123" } });
+  const submit = screen.getByRole("button", { name: "注册并进入" });
+  await waitFor(() => expect(submit).toBeEnabled());
+  fireEvent.click(submit);
+
+  await screen.findByLabelText("项目导航");
+  expect(screen.getByLabelText("用户登录信息")).toHaveTextContent("newauthor");
+  expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("register-token");
 });

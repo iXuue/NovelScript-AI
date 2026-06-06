@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "chroma_key": {
+    "hex": "#00FF00",
+    "rgb": [
+      0,
+      255,
+      0
+    ],
+    "threshold": 96.0
+  },
+  "rows": [
+    {
+      "state": "idle",
+      "frames": [
+        "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\00.png",
+        "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\01.png",
+        "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\02.png",
+        "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\03.png",
+        "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\04.png",
+        "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\05.png"
+      ],
+      "method": "components"
+    }
+  ]
+}

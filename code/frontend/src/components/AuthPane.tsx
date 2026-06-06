@@ -7,23 +7,40 @@ type AuthMode = "login" | "register";
 type Props = {
   error: string | null;
   loading: boolean;
+  onModeChange?: () => void;
   onSubmit: (mode: AuthMode, loginId: string, password: string) => void;
 };
 
-export function AuthPane({ error, loading, onSubmit }: Props) {
-  const [mode, setMode] = useState<AuthMode>("login");
+export function AuthPane({
+  error,
+  loading,
+  onModeChange,
+  onSubmit
+}: Props) {
+  const [mode, setMode] = useState<AuthMode>("register");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
 
   const title = mode === "login" ? "登录工作室" : "注册账号";
   const actionLabel = mode === "login" ? "登录" : "注册并进入";
-  const canSubmit = loginId.trim().length >= 2 && password.length >= 6 && !loading;
+  const normalizedLoginId = loginId.trim();
+  const registerLoginIdValid = /^[A-Za-z0-9\u4e00-\u9fff]{2,32}$/.test(normalizedLoginId);
+  const registerPasswordValid = password.length >= 6 && password.length <= 128;
+  const canSubmit =
+    mode === "register"
+      ? registerLoginIdValid && registerPasswordValid && !loading
+      : normalizedLoginId.length > 0 && password.length > 0 && !loading;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit) return;
     onSubmit(mode, loginId, password);
+  }
+
+  function selectMode(nextMode: AuthMode) {
+    setMode(nextMode);
+    onModeChange?.();
   }
 
   return (
@@ -48,22 +65,22 @@ export function AuthPane({ error, loading, onSubmit }: Props) {
 
         <div className="figma-auth-switch" role="tablist" aria-label="认证方式">
           <button
-            aria-selected={mode === "login"}
-            className={mode === "login" ? "active" : ""}
-            role="tab"
-            type="button"
-            onClick={() => setMode("login")}
-          >
-            登录
-          </button>
-          <button
             aria-selected={mode === "register"}
             className={mode === "register" ? "active" : ""}
             role="tab"
             type="button"
-            onClick={() => setMode("register")}
+            onClick={() => selectMode("register")}
           >
             注册
+          </button>
+          <button
+            aria-selected={mode === "login"}
+            className={mode === "login" ? "active" : ""}
+            role="tab"
+            type="button"
+            onClick={() => selectMode("login")}
+          >
+            登录
           </button>
         </div>
 
@@ -74,7 +91,7 @@ export function AuthPane({ error, loading, onSubmit }: Props) {
               autoComplete="username"
               autoFocus
               aria-label="账号"
-              placeholder="输入账号"
+              placeholder={mode === "register" ? "中文、英文或数字" : "输入账号"}
               value={loginId}
               onChange={(event) => setLoginId(event.target.value)}
             />
@@ -85,7 +102,7 @@ export function AuthPane({ error, loading, onSubmit }: Props) {
               <input
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 aria-label="密码"
-                placeholder="至少 6 位"
+                placeholder={mode === "register" ? "至少 6 位" : "输入密码"}
                 type={passwordVisible ? "text" : "password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}

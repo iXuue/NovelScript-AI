@@ -5,14 +5,16 @@ from sqlalchemy.orm import Session
 
 from app.domain.artifacts import ArtifactStatus, ProjectStage
 from app.models.analysis import EvidenceItem
+from app.models.export import ExportJob
 from app.models.project import Project
 from app.models.repair import RepairAttempt
 from app.models.script import ScriptContentBlock, ScriptScene, ScriptSceneValidation, ScriptVersion
 from app.models.scene_plan import ScenePlan, ScenePlanScene
 from app.models.story import StoryBible
 from app.models.style import StyleProfile
+from app.services.context_budget_service import compact_lines, generate_with_context_log, rank_evidence_items, truncate_text
 from app.services.export_service import to_yaml_preview
-from app.services.llm_provider import LLMProvider, LLMRequest
+from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage, update_project_stage_in_db
 from app.services.store import STORE, now_utc, persistent_id
 
@@ -36,12 +38,18 @@ def generate_script_from_confirmed_scene_plan(db: Session, project_id: str, llm_
     generated_scenes = []
     model_names = []
     for scene in scenes:
-        response = llm_provider.generate(
-            LLMRequest(
-                task_type="script_generation",
-                prompt=_script_scene_prompt(scene, evidence_items, story_bible, style_profile),
-                response_format="json",
-            )
+        relevant_evidence_count = len([evidence for evidence in evidence_items if evidence.evidence_id in scene.source_evidence_ids])
+        response = generate_with_context_log(
+            llm_provider,
+            task_type="script_generation",
+            prompt=_script_scene_prompt(scene, evidence_items, story_bible, style_profile),
+            response_format="json",
+            db=db,
+            project_id=project_id,
+            step_type="script_generation",
+            chunk_range={"scene_id": scene.scene_id, "scene_order": scene.order},
+            source_item_count=relevant_evidence_count,
+            included_item_count=min(relevant_evidence_count, 80),
         )
         model_names.append(response.model_name)
         generated_scenes.append(
@@ -137,12 +145,18 @@ def repair_script_scene(db: Session, project_id: str, scene_id: str, llm_provide
     evidence_items = _evidence_items(db, project_id)
     style_profile = _style_profile(db, project_id)
     current_blocks = sorted([block for block in version.content_blocks if block.scene_id == scene_id], key=lambda block: block.order)
-    response = llm_provider.generate(
-        LLMRequest(
-            task_type="script_scene_repair",
-            prompt=_script_scene_repair_prompt(scene_plan_scene, script_scene, current_blocks, validation, evidence_items, style_profile),
-            response_format="json",
-        )
+    relevant_evidence_count = len([evidence for evidence in evidence_items if evidence.evidence_id in scene_plan_scene.source_evidence_ids])
+    response = generate_with_context_log(
+        llm_provider,
+        task_type="script_scene_repair",
+        prompt=_script_scene_repair_prompt(scene_plan_scene, script_scene, current_blocks, validation, evidence_items, style_profile),
+        response_format="json",
+        db=db,
+        project_id=project_id,
+        step_type="script_scene_repair",
+        chunk_range={"scene_id": scene_id},
+        source_item_count=relevant_evidence_count + len(current_blocks),
+        included_item_count=min(relevant_evidence_count, 80) + len(current_blocks),
     )
     repaired_scene = _validate_script_scene_payload(
         _load_json_object(response.text),
@@ -178,11 +192,35 @@ def repair_script_scene(db: Session, project_id: str, scene_id: str, llm_provide
 
 
 def _replace_script_version(db: Session, project_id: str, title: str, scenes: list[dict], source: str) -> ScriptVersion:
-    db.execute(delete(ScriptVersion).where(ScriptVersion.project_id == project_id))
+    previous_current = (
+        db.query(ScriptVersion)
+        .filter(ScriptVersion.project_id == project_id, ScriptVersion.is_current.is_(True))
+        .order_by(ScriptVersion.version_number.desc())
+        .first()
+    )
+    for current in db.query(ScriptVersion).filter(ScriptVersion.project_id == project_id, ScriptVersion.is_current.is_(True)).all():
+        current.is_current = False
+        if current.status == ArtifactStatus.current:
+            current.status = ArtifactStatus.historical
+        current.stale_reason = "replaced_by_new_script"
+        current.updated_at = now_utc()
+    for export in db.query(ExportJob).filter(ExportJob.project_id == project_id, ExportJob.status == "succeeded").all():
+        export.status = "stale"
+    next_version_number = (
+        db.query(ScriptVersion.version_number)
+        .filter(ScriptVersion.project_id == project_id)
+        .order_by(ScriptVersion.version_number.desc())
+        .first()
+    )
+    version_number = (next_version_number[0] if next_version_number else 0) + 1
     timestamp = now_utc()
     script_version = ScriptVersion(
         script_version_id=persistent_id("script_v"),
         project_id=project_id,
+        version_number=version_number,
+        is_current=True,
+        parent_script_version_id=previous_current.script_version_id if previous_current is not None else None,
+        stale_reason=None,
         status=ArtifactStatus.current,
         source=source,
         generated_at=timestamp,
@@ -315,7 +353,7 @@ def _script_scene_prompt(
         f"scene_plan_scene:\n{_scene_block(scene)}\n\n"
         f"relevant_evidence:\n{_evidence_block(relevant_evidence)}\n\n"
         f"story_bible:\n{_story_bible_block(story_bible)}\n\n"
-        f"style_profile:\n{style_profile.profile_text if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
+        f"style_profile:\n{truncate_text(style_profile.profile_text, 3000) if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
     )
 
 
@@ -344,6 +382,7 @@ def _validate_and_store_script_scenes(
             style_profile,
             llm_provider,
             timestamp,
+            db=db,
         )
         db.add(validation)
         validations.append(validation)
@@ -385,6 +424,7 @@ def _validate_and_store_one_script_scene(
         style_profile,
         llm_provider,
         now_utc(),
+        db=db,
     )
     db.add(validation)
     db.commit()
@@ -401,19 +441,26 @@ def _build_script_scene_validation(
     style_profile: StyleProfile | None,
     llm_provider: LLMProvider,
     timestamp,
+    db=None,
 ) -> ScriptSceneValidation:
-    response = llm_provider.generate(
-        LLMRequest(
-            task_type="script_scene_validation",
-            prompt=_script_scene_validation_prompt(
-                scene_plan_scene,
-                script_scene,
-                content_blocks,
-                evidence_items,
-                style_profile,
-            ),
-            response_format="json",
-        )
+    relevant_evidence_count = len([evidence for evidence in evidence_items if evidence.evidence_id in scene_plan_scene.source_evidence_ids])
+    response = generate_with_context_log(
+        llm_provider,
+        task_type="script_scene_validation",
+        prompt=_script_scene_validation_prompt(
+            scene_plan_scene,
+            script_scene,
+            content_blocks,
+            evidence_items,
+            style_profile,
+        ),
+        response_format="json",
+        db=db,
+        project_id=version.project_id,
+        step_type="script_scene_validation",
+        chunk_range={"scene_id": script_scene.scene_id},
+        source_item_count=relevant_evidence_count + len(content_blocks),
+        included_item_count=min(relevant_evidence_count, 80) + len(content_blocks),
     )
     payload = _validate_script_scene_validation_payload(_load_json_object(response.text))
     return ScriptSceneValidation(
@@ -454,7 +501,7 @@ def _script_scene_validation_prompt(
         f"script_scene:\n{_script_scene_block(script_scene)}\n\n"
         f"content_blocks:\n{_script_block(content_blocks)}\n\n"
         f"relevant_evidence:\n{_evidence_block(relevant_evidence)}\n\n"
-        f"style_profile:\n{style_profile.profile_text if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
+        f"style_profile:\n{truncate_text(style_profile.profile_text, 3000) if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
     )
 
 
@@ -482,7 +529,7 @@ def _script_scene_repair_prompt(
         f"script_scene:\n{_script_scene_block(script_scene)}\n\n"
         f"content_blocks:\n{_script_block(content_blocks)}\n\n"
         f"relevant_evidence:\n{_evidence_block(relevant_evidence)}\n\n"
-        f"style_profile:\n{style_profile.profile_text if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
+        f"style_profile:\n{truncate_text(style_profile.profile_text, 3000) if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
     )
 
 
@@ -541,19 +588,23 @@ def _script_block(content_blocks: list[ScriptContentBlock]) -> str:
 
 
 def _evidence_block(evidence_items: list[EvidenceItem]) -> str:
-    return "\n".join(
+    ranked = rank_evidence_items(evidence_items)
+    return compact_lines(
+        (
         json.dumps(
             {
                 "evidence_id": evidence.evidence_id,
                 "chapter_id": evidence.chapter_id,
                 "paragraph_id": evidence.paragraph_id,
-                "quote": evidence.quote,
-                "explanation": evidence.explanation,
+                "quote": truncate_text(evidence.quote, 300, ""),
+                "explanation": truncate_text(evidence.explanation, 600),
                 "must_keep": evidence.must_keep,
             },
             ensure_ascii=False,
         )
-        for evidence in evidence_items
+        for evidence in ranked
+        ),
+        6000,
     )
 
 
@@ -567,7 +618,7 @@ def _story_bible_block(story_bible: StoryBible | None) -> str:
             "main_characters": story_bible.main_characters,
             "relationships": story_bible.relationships,
             "locations": story_bible.locations,
-            "central_conflict": story_bible.central_conflict,
+            "central_conflict": truncate_text(story_bible.central_conflict, 800),
         },
         ensure_ascii=False,
     )
@@ -579,6 +630,7 @@ def _confirmed_scene_plan(db: Session, project_id: str) -> ScenePlan | None:
         .filter(
             ScenePlan.project_id == project_id,
             ScenePlan.status == ArtifactStatus.current,
+            ScenePlan.is_current.is_(True),
             ScenePlan.confirmed.is_(True),
         )
         .one_or_none()
@@ -588,7 +640,7 @@ def _confirmed_scene_plan(db: Session, project_id: str) -> ScenePlan | None:
 def _current_script_version(db: Session, project_id: str) -> ScriptVersion | None:
     return (
         db.query(ScriptVersion)
-        .filter(ScriptVersion.project_id == project_id, ScriptVersion.status == ArtifactStatus.current)
+        .filter(ScriptVersion.project_id == project_id, ScriptVersion.status == ArtifactStatus.current, ScriptVersion.is_current.is_(True))
         .one_or_none()
     )
 

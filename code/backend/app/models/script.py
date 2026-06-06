@@ -15,10 +15,14 @@ json_value_type = JSON().with_variant(JSONB, "postgresql")
 
 class ScriptVersion(Base):
     __tablename__ = "script_versions"
-    __table_args__ = (UniqueConstraint("project_id", "status", name="uq_script_versions_project_status"),)
+    __table_args__ = (UniqueConstraint("project_id", "version_number", name="uq_script_versions_project_version"),)
 
     script_version_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    parent_script_version_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    stale_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     source: Mapped[str] = mapped_column(String(120), nullable=False)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

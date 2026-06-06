@@ -7,7 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.models.analysis import ChapterSummary, EvidenceItem
 from app.models.chapter import Chapter, Paragraph
-from app.services.llm_provider import LLMProvider, LLMRequest
+from app.services.context_budget_service import (
+    DEFAULT_MAX_ANALYSIS_CHUNK_CHARS,
+    DEFAULT_MAX_LLM_PROMPT_CHARS,
+    DEFAULT_MAX_QUOTE_CHARS,
+    chunk_items_by_text,
+    generate_with_context_log,
+    truncate_text,
+)
+from app.services.llm_provider import LLMProvider
 from app.services.store import now_utc
 
 
@@ -47,7 +55,7 @@ def generate_chapter_summaries(
     timestamp = now_utc()
     summaries: list[ChapterSummary] = []
     chapters = _analysis_snapshots(db, project_id)
-    payloads = run_summary_payload_generation(chapters, llm_provider)
+    payloads = run_summary_payload_generation(chapters, llm_provider, db=db, project_id=project_id)
     for chapter, payload in payloads:
         summary = ChapterSummary(
             project_id=project_id,
@@ -80,7 +88,7 @@ def generate_evidence_index(
     evidence_items: list[EvidenceItem] = []
     counter = 1
     chapters = _analysis_snapshots(db, project_id)
-    payloads_by_chapter = run_evidence_payload_generation(chapters, llm_provider)
+    payloads_by_chapter = run_evidence_payload_generation(chapters, llm_provider, db=db, project_id=project_id)
     for chapter, paragraphs, payloads in payloads_by_chapter:
         valid_paragraph_ids = {paragraph.paragraph_id for paragraph in paragraphs}
         for payload in payloads:
@@ -112,7 +120,7 @@ def generate_evidence_index(
 
 def run_initial_text_analysis(db: Session, project_id: str, llm_provider: LLMProvider | None = None) -> dict:
     chapters = _analysis_snapshots(db, project_id)
-    payloads = run_analysis_payload_generation(chapters, llm_provider)
+    payloads = run_analysis_payload_generation(chapters, llm_provider, db=db, project_id=project_id)
     summaries = _persist_chapter_summaries(db, project_id, payloads["summaries"])
     evidence_items = _persist_evidence_items(db, project_id, payloads["evidence_payloads_by_chapter"])
     return {"chapter_summary_count": len(summaries), "evidence_count": len(evidence_items)}
@@ -121,11 +129,24 @@ def run_initial_text_analysis(db: Session, project_id: str, llm_provider: LLMPro
 def run_analysis_payload_generation(
     chapters: list[tuple[ChapterSnapshot, list[ParagraphSnapshot]]],
     llm_provider: LLMProvider | None,
+    db=None,
+    project_id: str | None = None,
 ) -> dict:
     if llm_provider is None:
         return {
-            "summaries": run_summary_payload_generation(chapters, None),
-            "evidence_payloads_by_chapter": run_evidence_payload_generation(chapters, None),
+            "summaries": run_summary_payload_generation(chapters, None, db=db, project_id=project_id),
+            "evidence_payloads_by_chapter": run_evidence_payload_generation(chapters, None, db=db, project_id=project_id),
+        }
+
+    if db is not None:
+        return {
+            "summaries": run_summary_payload_generation(chapters, llm_provider, db=db, project_id=project_id),
+            "evidence_payloads_by_chapter": run_evidence_payload_generation(
+                chapters,
+                llm_provider,
+                db=db,
+                project_id=project_id,
+            ),
         }
 
     max_workers = max(1, min(8, len(chapters) * 2))
@@ -159,9 +180,17 @@ def run_analysis_payload_generation(
 def run_summary_payload_generation(
     chapters: list[tuple[ChapterSnapshot, list[ParagraphSnapshot]]],
     llm_provider: LLMProvider | None,
+    db=None,
+    project_id: str | None = None,
 ) -> list[tuple[ChapterSnapshot, dict]]:
     if llm_provider is None:
         return [(chapter, _generate_summary_payload(chapter, paragraphs, None)) for chapter, paragraphs in chapters]
+
+    if db is not None:
+        return [
+            (chapter, _generate_summary_payload(chapter, paragraphs, llm_provider, db=db, project_id=project_id))
+            for chapter, paragraphs in chapters
+        ]
 
     summaries: list[tuple[ChapterSnapshot, dict]] = []
     with ThreadPoolExecutor(max_workers=max(1, min(8, len(chapters)))) as executor:
@@ -178,10 +207,22 @@ def run_summary_payload_generation(
 def run_evidence_payload_generation(
     chapters: list[tuple[ChapterSnapshot, list[ParagraphSnapshot]]],
     llm_provider: LLMProvider | None,
+    db=None,
+    project_id: str | None = None,
 ) -> list[tuple[ChapterSnapshot, list[ParagraphSnapshot], list[dict]]]:
     if llm_provider is None:
         return [
             (chapter, paragraphs, _generate_evidence_payloads(chapter, paragraphs, None))
+            for chapter, paragraphs in chapters
+        ]
+
+    if db is not None:
+        return [
+            (
+                chapter,
+                paragraphs,
+                _generate_evidence_payloads(chapter, paragraphs, llm_provider, db=db, project_id=project_id),
+            )
             for chapter, paragraphs in chapters
         ]
 
@@ -319,6 +360,8 @@ def _generate_summary_payload(
     chapter: Chapter,
     paragraphs: list[Paragraph],
     llm_provider: LLMProvider | None,
+    db=None,
+    project_id: str | None = None,
 ) -> dict:
     if llm_provider is None:
         excerpt = " ".join(paragraph.text for paragraph in paragraphs[:2])
@@ -333,31 +376,45 @@ def _generate_summary_payload(
             "source": "deterministic_stub",
         }
 
-    response = llm_provider.generate(
-        LLMRequest(
+    payloads = []
+    model_names = []
+    chunks = _paragraph_chunks(paragraphs)
+    for chunk_index, chunk in enumerate(chunks, start=1):
+        response = generate_with_context_log(
+            llm_provider,
             task_type="chapter_summary",
-            prompt=_chapter_summary_prompt(chapter, paragraphs),
+            prompt=_chapter_summary_prompt(chapter, chunk),
             response_format="json",
+            db=db,
+            project_id=project_id,
+            step_type="chapter_summary",
+            chunk_range=_chunk_range(chapter.chapter_id, chunk_index, len(chunks), chunk),
+            source_item_count=len(paragraphs),
+            included_item_count=len(chunk),
+            max_chars=DEFAULT_MAX_LLM_PROMPT_CHARS,
         )
-    )
-    data = _load_json_object(response.text, "chapter_summary")
-    payload = {
-        "summary": _required_text(data, "summary", "chapter_summary"),
-        "key_events": _required_list(data, "key_events", "chapter_summary"),
-        "characters": _required_list(data, "characters", "chapter_summary"),
-        "locations": _required_list(data, "locations", "chapter_summary"),
-        "conflicts": _required_list(data, "conflicts", "chapter_summary"),
-        "foreshadowing": _required_list(data, "foreshadowing", "chapter_summary"),
-        "adaptation_suggestions": _required_list(data, "adaptation_suggestions", "chapter_summary"),
-        "source": response.model_name,
-    }
-    return payload
+        model_names.append(response.model_name)
+        data = _load_json_object(response.text, "chapter_summary")
+        payloads.append(
+            {
+                "summary": _required_text(data, "summary", "chapter_summary"),
+                "key_events": _required_list(data, "key_events", "chapter_summary"),
+                "characters": _required_list(data, "characters", "chapter_summary"),
+                "locations": _required_list(data, "locations", "chapter_summary"),
+                "conflicts": _required_list(data, "conflicts", "chapter_summary"),
+                "foreshadowing": _required_list(data, "foreshadowing", "chapter_summary"),
+                "adaptation_suggestions": _required_list(data, "adaptation_suggestions", "chapter_summary"),
+            }
+        )
+    return _merge_summary_payloads(payloads, ",".join(sorted(set(model_names))) or "unknown")
 
 
 def _generate_evidence_payloads(
     chapter: Chapter,
     paragraphs: list[Paragraph],
     llm_provider: LLMProvider | None,
+    db=None,
+    project_id: str | None = None,
 ) -> list[dict]:
     if llm_provider is None:
         return [
@@ -376,14 +433,68 @@ def _generate_evidence_payloads(
             for index, paragraph in enumerate(paragraphs, start=1)
         ]
 
-    response = llm_provider.generate(
-        LLMRequest(
+    payloads = []
+    chunks = _paragraph_chunks(paragraphs)
+    for chunk_index, chunk in enumerate(chunks, start=1):
+        response = generate_with_context_log(
+            llm_provider,
             task_type="evidence_extraction",
-            prompt=_evidence_prompt(chapter, paragraphs),
+            prompt=_evidence_prompt(chapter, chunk),
             response_format="json",
+            db=db,
+            project_id=project_id,
+            step_type="evidence_extraction",
+            chunk_range=_chunk_range(chapter.chapter_id, chunk_index, len(chunks), chunk),
+            source_item_count=len(paragraphs),
+            included_item_count=len(chunk),
+            max_chars=DEFAULT_MAX_LLM_PROMPT_CHARS,
         )
-    )
-    data = _load_json_object(response.text, "evidence_extraction")
+        payloads.extend(_parse_evidence_payloads(response.text, response.model_name, chunk))
+    return payloads
+
+
+def _paragraph_chunks(paragraphs: list[Paragraph]) -> list[list[Paragraph]]:
+    return chunk_items_by_text(paragraphs, lambda paragraph: paragraph.text, DEFAULT_MAX_ANALYSIS_CHUNK_CHARS) or [[]]
+
+
+def _chunk_range(chapter_id: str, chunk_index: int, chunk_count: int, paragraphs: list[Paragraph]) -> dict:
+    return {
+        "chapter_id": chapter_id,
+        "chunk_index": chunk_index,
+        "chunk_count": chunk_count,
+        "first_paragraph_id": paragraphs[0].paragraph_id if paragraphs else None,
+        "last_paragraph_id": paragraphs[-1].paragraph_id if paragraphs else None,
+    }
+
+
+def _merge_unique(items: list) -> list:
+    result = []
+    seen = set()
+    for item in items:
+        marker = json.dumps(item, ensure_ascii=False, sort_keys=True) if isinstance(item, (dict, list)) else str(item)
+        if marker not in seen:
+            seen.add(marker)
+            result.append(item)
+    return result[:80]
+
+
+def _merge_summary_payloads(payloads: list[dict], source: str) -> dict:
+    return {
+        "summary": truncate_text("\n".join(payload["summary"] for payload in payloads if payload.get("summary")), 4000),
+        "key_events": _merge_unique([item for payload in payloads for item in payload["key_events"]]),
+        "characters": _merge_unique([item for payload in payloads for item in payload["characters"]]),
+        "locations": _merge_unique([item for payload in payloads for item in payload["locations"]]),
+        "conflicts": _merge_unique([item for payload in payloads for item in payload["conflicts"]]),
+        "foreshadowing": _merge_unique([item for payload in payloads for item in payload["foreshadowing"]]),
+        "adaptation_suggestions": _merge_unique(
+            [item for payload in payloads for item in payload["adaptation_suggestions"]]
+        ),
+        "source": source,
+    }
+
+
+def _parse_evidence_payloads(text: str, source: str, paragraphs: list[Paragraph]) -> list[dict]:
+    data = _load_json_object(text, "evidence_extraction")
     evidence = data.get("evidence")
     if not isinstance(evidence, list):
         raise RuntimeError("evidence_extraction response must contain an evidence list")
@@ -393,7 +504,7 @@ def _generate_evidence_payloads(
         if not isinstance(item, dict):
             raise RuntimeError("evidence_extraction evidence items must be JSON objects")
         paragraph_id = _required_text(item, "paragraph_id", "evidence_extraction")
-        quote = _required_text(item, "quote", "evidence_extraction")
+        quote = truncate_text(_required_text(item, "quote", "evidence_extraction"), DEFAULT_MAX_QUOTE_CHARS, "")
         evidence_type = _required_text(item, "evidence_type", "evidence_extraction")
         if evidence_type not in ALLOWED_EVIDENCE_TYPES:
             raise RuntimeError(f"evidence_type must be one of {sorted(ALLOWED_EVIDENCE_TYPES)}")
@@ -422,7 +533,7 @@ def _generate_evidence_payloads(
                 "related_plot_points": _required_list(item, "related_plot_points", "evidence_extraction"),
                 "importance": importance,
                 "must_keep": item["must_keep"],
-                "source": response.model_name,
+                "source": source,
             }
         )
     return payloads

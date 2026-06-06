@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
+from app.api.auth import get_current_user
 from app.api.errors import api_error
 from app.core.database import get_db
+from app.models.user import User
 from app.services.input_adapter import normalize_to_markdown, parse_multipart_file
 from app.services.project_service import require_project
 from app.services.style_service import upload_style_reference
@@ -11,9 +13,14 @@ router = APIRouter()
 
 
 @router.post("/projects/{project_id}/style-reference-uploads")
-async def upload_style_reference_endpoint(project_id: str, request: Request, db: Session = Depends(get_db)):
+async def upload_style_reference_endpoint(
+    project_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        require_project(project_id)
+        require_project(project_id, db, current_user.user_id)
         payload = parse_multipart_file(await request.body(), request.headers.get("content-type", ""))
         markdown = normalize_to_markdown(payload.filename, payload.content)
         return upload_style_reference(project_id, payload.filename, markdown, db)

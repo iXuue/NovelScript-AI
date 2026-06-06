@@ -19,6 +19,7 @@ import {
   getYamlPreview,
   listProjects,
   loginUser,
+  logoutUser,
   modifyScript,
   repairScenePlan,
   repairScriptScene,
@@ -103,6 +104,18 @@ function isNotFound(err: unknown): boolean {
 
 function displayError(err: unknown): string {
   if (err instanceof ApiRequestError) {
+    if (err.code === "invalid_credentials") {
+      return "账号或密码错误；新用户请切换到注册。";
+    }
+    if (err.code === "login_id_exists") {
+      return "账号已存在；请直接登录或换一个账号。";
+    }
+    if (err.code === "invalid_login_id") {
+      return "账号需为 2-32 位中文、英文或数字，不能包含空格或符号。";
+    }
+    if (err.code === "invalid_password") {
+      return "密码需为 6-128 位。";
+    }
     return err.code ? `${err.message} (${err.code})` : err.message;
   }
   return err instanceof Error ? err.message : "操作失败";
@@ -296,6 +309,7 @@ export default function App({ initialYaml }: AppProps) {
   }
 
   function handleLogout() {
+    void logoutUser().catch(() => undefined);
     window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setAuthToken(null);
     setAuthTokenValue(null);
@@ -628,6 +642,8 @@ export default function App({ initialYaml }: AppProps) {
   const hasNovelUpload =
     Boolean(activeProject) &&
     (chapters.length > 0 || Boolean(uploadedNovelName) || Boolean(activeProject && HAS_UPLOAD_STAGES.has(activeProject.stage)));
+  const canGenerateScenePlan = chaptersConfirmed && Boolean(styleSourceValue) && !scenePlan;
+  const canGenerateScript = Boolean(scenePlan && scenePlanConfirmed && !scriptPreview);
   const statusText = useMemo(() => {
     if (!activeProject) return "等待项目创建";
     if (!hasNovelUpload) return "正在等待用户上传";
@@ -640,7 +656,12 @@ export default function App({ initialYaml }: AppProps) {
   if (!initialYaml && (authChecking || !authUser)) {
     return (
       <div className="figma-workspace figma-auth-workspace">
-        <AuthPane error={authError} loading={authLoading || authChecking} onSubmit={handleAuthSubmit} />
+        <AuthPane
+          error={authError}
+          loading={authLoading || authChecking}
+          onModeChange={() => setAuthError(null)}
+          onSubmit={handleAuthSubmit}
+        />
       </div>
     );
   }
@@ -696,6 +717,8 @@ export default function App({ initialYaml }: AppProps) {
         {activeProject ? (
           <ConversationPane
             activeLabel={loadingLabel}
+            canGenerateScenePlan={canGenerateScenePlan}
+            canGenerateScript={canGenerateScript}
             chapters={chapters}
             chaptersConfirmed={chaptersConfirmed}
             error={error}
@@ -710,6 +733,8 @@ export default function App({ initialYaml }: AppProps) {
             styleLocked={styleLocked}
             uploadedNovelName={uploadedNovelName}
             onConfirmChapters={handleConfirmChapters}
+            onGenerateScenePlan={handleGenerateScenePlan}
+            onGenerateScript={handleGenerateScript}
             onNovelSelected={handleNovelSelected}
             onStyleChange={handleStyleSourceChange}
             onStyleReferenceSelected={handleStyleReferenceSelected}

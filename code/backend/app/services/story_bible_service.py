@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.models.analysis import ChapterSummary, EvidenceItem
 from app.models.story import StoryBible
-from app.services.llm_provider import LLMProvider, LLMRequest
+from app.services.context_budget_service import compact_lines, generate_with_context_log, rank_evidence_items, truncate_text
+from app.services.llm_provider import LLMProvider
 from app.services.store import now_utc
 
 
@@ -21,12 +22,16 @@ def generate_story_bible(db: Session, project_id: str, llm_provider: LLMProvider
     if llm_provider is None:
         raise RuntimeError("LLM provider is required to generate Story Bible")
 
-    response = llm_provider.generate(
-        LLMRequest(
-            task_type="story_bible",
-            prompt=_story_bible_prompt(summaries, evidence_items),
-            response_format="json",
-        )
+    response = generate_with_context_log(
+        llm_provider,
+        task_type="story_bible",
+        prompt=_story_bible_prompt(summaries, evidence_items),
+        response_format="json",
+        db=db,
+        project_id=project_id,
+        step_type="story_bible",
+        source_item_count=len(summaries) + len(evidence_items),
+        included_item_count=len(summaries) + min(len(evidence_items), 80),
     )
     payload = _validate_story_bible_payload(_load_json_object(response.text))
     return _replace_story_bible(db, project_id, payload, response.model_name)
@@ -71,14 +76,13 @@ def _story_bible_prompt(summaries: list[ChapterSummary], evidence_items: list[Ev
 
 
 def _summary_block(summaries: list[ChapterSummary]) -> str:
-    lines = []
-    for summary in summaries:
-        lines.append(
+    return compact_lines(
+        (
             json.dumps(
                 {
                     "chapter_id": summary.chapter_id,
                     "title": summary.title,
-                    "summary": summary.summary,
+                    "summary": truncate_text(summary.summary, 1200),
                     "key_events": summary.key_events,
                     "characters": summary.characters,
                     "locations": summary.locations,
@@ -87,20 +91,23 @@ def _summary_block(summaries: list[ChapterSummary]) -> str:
                 },
                 ensure_ascii=False,
             )
+            for summary in summaries
         )
-    return "\n".join(lines)
+        ,
+        8000,
+    )
 
 
 def _evidence_block(evidence_items: list[EvidenceItem]) -> str:
-    lines = []
-    for evidence in evidence_items:
-        lines.append(
+    ranked = rank_evidence_items(evidence_items)
+    return compact_lines(
+        (
             json.dumps(
                 {
                     "evidence_id": evidence.evidence_id,
                     "chapter_id": evidence.chapter_id,
                     "paragraph_id": evidence.paragraph_id,
-                    "quote": evidence.quote,
+                    "quote": truncate_text(evidence.quote, 300, ""),
                     "evidence_type": evidence.evidence_type,
                     "explanation": evidence.explanation,
                     "related_characters": evidence.related_characters,
@@ -111,8 +118,11 @@ def _evidence_block(evidence_items: list[EvidenceItem]) -> str:
                 },
                 ensure_ascii=False,
             )
+            for evidence in ranked
         )
-    return "\n".join(lines)
+        ,
+        8000,
+    )
 
 
 def _chapter_summaries(db: Session, project_id: str) -> list[ChapterSummary]:

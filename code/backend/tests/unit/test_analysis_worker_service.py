@@ -11,6 +11,7 @@ from app.services.analysis_worker_service import (
     _generate_summary_payload,
     run_analysis_payload_generation,
 )
+from app.services.context_budget_service import DEFAULT_MAX_LLM_PROMPT_CHARS
 from app.services.llm_provider import LLMProvider, LLMRequest, LLMResponse, LLMUsage
 
 
@@ -62,6 +63,32 @@ class BlockingProvider(LLMProvider):
                 '"related_plot_points":[],"importance":3,"must_keep":true}]}'
             ) % (paragraph_id, quote)
         return LLMResponse(text=text, model_name="blocking", usage=LLMUsage(input_tokens=1, output_tokens=1))
+
+
+class ChunkTrackingProvider(LLMProvider):
+    def __init__(self) -> None:
+        self.requests: list[LLMRequest] = []
+
+    def generate(self, request: LLMRequest) -> LLMResponse:
+        self.requests.append(request)
+        paragraph_id = "CH001_P001"
+        quote = "长段落内容"
+        for line in request.prompt.splitlines():
+            if line.startswith("- CH"):
+                paragraph_id, quote = line.removeprefix("- ").split(": ", 1)
+                break
+        if request.task_type == "chapter_summary":
+            text = (
+                '{"summary":"分块摘要","key_events":["分块事件"],"characters":[],"locations":[],'
+                '"conflicts":[],"foreshadowing":[],"adaptation_suggestions":[]}'
+            )
+        else:
+            text = (
+                '{"evidence":[{"paragraph_id":"%s","quote":"%s","evidence_type":"关键事件",'
+                '"explanation":"说明","related_characters":[],"related_locations":[],"related_plot_points":[],'
+                '"importance":3,"must_keep":true}]}'
+            ) % (paragraph_id, quote[:120])
+        return LLMResponse(text=text, model_name="chunk-tracker", usage=LLMUsage(input_tokens=1, output_tokens=1))
 
 
 def test_chapter_summary_prompt_contains_schema_and_guardrails():
@@ -133,3 +160,19 @@ def test_analysis_payload_generation_runs_summary_and_evidence_for_each_chapter_
     assert elapsed < 0.2
     assert len(result["summaries"]) == 2
     assert len(result["evidence_payloads_by_chapter"]) == 2
+
+
+def test_long_chapter_analysis_splits_prompts_under_context_budget():
+    paragraphs = [
+        FakeParagraph(f"CH001_P{i:03d}", f"长段落内容 {i} " + ("雨夜线索" * 80))
+        for i in range(1, 501)
+    ]
+    provider = ChunkTrackingProvider()
+
+    summary = _generate_summary_payload(FakeChapter(), paragraphs, provider)
+    evidence = _generate_evidence_payloads(FakeChapter(), paragraphs, provider)
+
+    assert summary["summary"]
+    assert evidence
+    assert len(provider.requests) > 2
+    assert max(len(request.prompt) for request in provider.requests) <= DEFAULT_MAX_LLM_PROMPT_CHARS

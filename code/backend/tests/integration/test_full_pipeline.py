@@ -141,7 +141,7 @@ def _full_pipeline(client, style_kind="builtin", style_value="suspense"):
 
     # ---- 9. 导出 ----
     exports = {}
-    for fmt in ["yaml", "markdown", "txt", "docx", "pdf", "clean_json"]:
+    for fmt in ["yaml", "markdown", "txt", "docx", "clean_json"]:
         exp = client.post(f"/projects/{project_id}/exports", json={"format": fmt})
         assert exp.status_code == 200, f"export {fmt} failed"
         exports[fmt] = exp.json()
@@ -149,8 +149,15 @@ def _full_pipeline(client, style_kind="builtin", style_value="suspense"):
         download = client.get(exp.json()["download_url"])
         assert download.status_code == 200, f"download {fmt} failed"
         # 无内部字段泄漏
-        assert "content_block_id" not in download.text, f"{fmt} leaked content_block_id"
-        assert "source_evidence_ids" not in download.text, f"{fmt} leaked source_evidence_ids"
+        if fmt == "docx":
+            assert download.content.startswith(b"PK")
+        else:
+            assert "content_block_id" not in download.text, f"{fmt} leaked content_block_id"
+            assert "source_evidence_ids" not in download.text, f"{fmt} leaked source_evidence_ids"
+
+    pdf = client.post(f"/projects/{project_id}/exports", json={"format": "pdf"})
+    assert pdf.status_code == 400
+    assert pdf.json()["error"]["code"] == "pdf_not_available"
 
     return project_id, exports
 
@@ -212,7 +219,7 @@ def test_full_pipeline_all_artifacts_persisted(client):
 
         # 导出
         export_records = db.query(ExportJob).filter(ExportJob.project_id == project_id).all()
-        assert len(export_records) == 6
+        assert len(export_records) == 5
 
         # Checkpoint
         checkpoints = db.query(Checkpoint).filter(Checkpoint.project_id == project_id).all()

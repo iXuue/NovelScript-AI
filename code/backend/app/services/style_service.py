@@ -2,7 +2,10 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.domain.artifacts import ProjectStage
 from app.domain.style import StyleSource
+from app.models.project import Project
+from app.models.runtime import SourceFileRecord
 from app.models.style import StyleReferenceFile, StyleSourceRecord
+from app.services.artifact_service import mark_downstream_stale
 from app.services.local_snapshot_service import mirror_project_snapshot
 from app.services.project_service import update_project_stage
 from app.services.store import STORE, now_utc, persistent_id
@@ -22,8 +25,15 @@ def validate_style_source(data: dict) -> StyleSource:
         raise ValueError(str(exc)) from exc
 
 
+def _is_style_locked(project_id: str, db=None) -> bool:
+    if db is not None:
+        project = db.get(Project, project_id)
+        return bool(project and project.style_locked)
+    return project_id in STORE.style_locked
+
+
 def set_style_source(project_id: str, data: dict, db=None) -> dict:
-    if project_id in STORE.style_locked:
+    if _is_style_locked(project_id, db):
         raise PermissionError("style_source_locked")
     source = validate_style_source(data)
     source_dict = source.model_dump()
@@ -49,12 +59,13 @@ def set_style_source(project_id: str, data: dict, db=None) -> dict:
             record.reference_file_ids = source_dict.get("reference_file_ids") or []
             record.updated_at = timestamp
         db.commit()
+        mark_downstream_stale(db, f"style_source:{project_id}")
         mirror_project_snapshot(db, project_id)
     update_project_stage(project_id, ProjectStage.style_selected)
     return {
         "project_id": project_id,
         "style_source": source_dict,
-        "style_locked": False,
+        "style_locked": _is_style_locked(project_id, db),
         "stage": ProjectStage.style_selected,
     }
 
@@ -73,12 +84,12 @@ def get_style_source(project_id: str, db=None) -> dict:
     return {
         "project_id": project_id,
         "style_source": style_source,
-        "style_locked": project_id in STORE.style_locked,
+        "style_locked": _is_style_locked(project_id, db),
     }
 
 
 def clear_style_source(project_id: str, db=None) -> None:
-    if project_id in STORE.style_locked:
+    if _is_style_locked(project_id, db):
         raise PermissionError("style_source_locked")
     STORE.style_sources.pop(project_id, None)
     if db is not None:
@@ -86,11 +97,12 @@ def clear_style_source(project_id: str, db=None) -> None:
         if record is not None:
             db.delete(record)
             db.commit()
+        mark_downstream_stale(db, f"style_source:{project_id}")
         mirror_project_snapshot(db, project_id)
 
 
 def upload_style_reference(project_id: str, filename: str, markdown: str = "", db=None) -> dict:
-    if project_id in STORE.style_locked:
+    if _is_style_locked(project_id, db):
         raise PermissionError("style_source_locked")
     source = persistent_id if db is not None else STORE.next_id
     file_id = source("file_style")
@@ -112,11 +124,27 @@ def upload_style_reference(project_id: str, filename: str, markdown: str = "", d
                 created_at=now_utc(),
             )
         )
+        db.add(
+            SourceFileRecord(
+                file_id=file_id,
+                project_id=project_id,
+                purpose="style_reference",
+                filename=filename,
+                content_type=None,
+                character_count=len(markdown),
+                created_at=now_utc(),
+            )
+        )
         db.commit()
         mirror_project_snapshot(db, project_id)
     return payload
 
 
-def lock_style_source(project_id: str) -> None:
+def lock_style_source(project_id: str, db=None) -> None:
+    if db is not None:
+        project = db.get(Project, project_id)
+        if project is not None:
+            project.style_locked = True
+            project.updated_at = now_utc()
+            db.commit()
     STORE.style_locked.add(project_id)
-
