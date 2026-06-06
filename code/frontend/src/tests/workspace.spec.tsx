@@ -152,6 +152,7 @@ test("login stores token and opens workspace", async () => {
   );
 
   render(<App />);
+  fireEvent.click(screen.getByRole("tab", { name: "登录" }));
   fireEvent.change(screen.getByLabelText("账号"), { target: { value: "author" } });
   fireEvent.change(screen.getByLabelText("密码"), { target: { value: "password123" } });
   const submit = screen.getByRole("button", { name: "登录" });
@@ -160,4 +161,38 @@ test("login stores token and opens workspace", async () => {
 
   await screen.findByLabelText("项目导航");
   expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("login-token");
+});
+
+test("register is the default auth action and opens workspace", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const path = url.pathname;
+
+      if (method === "POST" && path === "/auth/register") {
+        return jsonResponse({
+          token: "register-token",
+          user: { user_id: "user_register", login_id: "new-author", created_at: "2026-06-06T00:00:00Z" }
+        });
+      }
+      if (method === "GET" && path === "/projects") {
+        expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer register-token");
+        return jsonResponse([]);
+      }
+      return jsonResponse({ error: { code: "not_mocked", message: `${method} ${path}`, details: {} } }, 500);
+    })
+  );
+
+  render(<App />);
+  expect(screen.getByRole("tab", { name: "注册" })).toHaveAttribute("aria-selected", "true");
+  fireEvent.change(screen.getByLabelText("账号"), { target: { value: "new-author" } });
+  fireEvent.change(screen.getByLabelText("密码"), { target: { value: "password123" } });
+  const submit = screen.getByRole("button", { name: "注册并进入" });
+  await waitFor(() => expect(submit).toBeEnabled());
+  fireEvent.click(submit);
+
+  await screen.findByLabelText("项目导航");
+  expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("register-token");
 });

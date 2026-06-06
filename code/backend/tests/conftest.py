@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import re
 
 import pytest
@@ -132,8 +133,8 @@ def reset_store():
     STORE.reset()
 
 
-@pytest.fixture()
-def client():
+@contextmanager
+def _test_client_context(authenticated: bool):
     import_models()
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -156,9 +157,30 @@ def client():
     try:
         test_client = TestClient(app)
         test_client.fake_llm_provider = fake_provider
+        if authenticated:
+            response = test_client.post(
+                "/auth/register",
+                json={"login_id": "test-user", "password": "password123"},
+            )
+            assert response.status_code == 200, response.text
+            session = response.json()
+            test_client.headers.update({"Authorization": f"Bearer {session['token']}"})
+            test_client.auth_user = session["user"]
         yield test_client
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def client():
+    with _test_client_context(authenticated=True) as test_client:
+        yield test_client
+
+
+@pytest.fixture()
+def unauth_client():
+    with _test_client_context(authenticated=False) as test_client:
+        yield test_client
 
 
 @pytest.fixture()

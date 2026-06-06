@@ -103,6 +103,12 @@ function isNotFound(err: unknown): boolean {
 
 function displayError(err: unknown): string {
   if (err instanceof ApiRequestError) {
+    if (err.code === "invalid_credentials") {
+      return "账号或密码错误；新用户请切换到注册。";
+    }
+    if (err.code === "login_id_exists") {
+      return "账号已存在；请直接登录或换一个账号。";
+    }
     return err.code ? `${err.message} (${err.code})` : err.message;
   }
   return err instanceof Error ? err.message : "操作失败";
@@ -640,7 +646,12 @@ export default function App({ initialYaml }: AppProps) {
   if (!initialYaml && (authChecking || !authUser)) {
     return (
       <div className="figma-workspace figma-auth-workspace">
-        <AuthPane error={authError} loading={authLoading || authChecking} onSubmit={handleAuthSubmit} />
+        <AuthPane
+          error={authError}
+          loading={authLoading || authChecking}
+          onModeChange={() => setAuthError(null)}
+          onSubmit={handleAuthSubmit}
+        />
       </div>
     );
   }

@@ -1,7 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.api.auth import get_current_user
 from app.api.errors import api_error
+from app.core.database import get_db
+from app.models.user import User
 from app.services.conversation_service import list_primary_messages, modify_script, send_message
 from app.services.project_service import require_project
 
@@ -18,27 +22,41 @@ class ModifyScriptRequest(BaseModel):
 
 
 @router.get("/projects/{project_id}/conversations/primary/messages")
-def list_messages_endpoint(project_id: str):
+def list_messages_endpoint(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        require_project(project_id)
+        require_project(project_id, db, current_user.user_id)
         return list_primary_messages(project_id)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
 
 
 @router.post("/projects/{project_id}/conversations/primary/messages")
-def send_message_endpoint(project_id: str, payload: SendMessageRequest):
+def send_message_endpoint(
+    project_id: str,
+    payload: SendMessageRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        require_project(project_id)
+        require_project(project_id, db, current_user.user_id)
         return send_message(project_id, payload.content)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
 
 
 @router.post("/projects/{project_id}/conversations/primary/modify-script")
-def modify_script_endpoint(project_id: str, payload: ModifyScriptRequest):
+def modify_script_endpoint(
+    project_id: str,
+    payload: ModifyScriptRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        require_project(project_id)
+        require_project(project_id, db, current_user.user_id)
         return modify_script(project_id, payload.message, payload.target)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")

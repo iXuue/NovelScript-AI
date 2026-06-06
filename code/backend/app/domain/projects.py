@@ -7,6 +7,7 @@ from app.domain.artifacts import ProjectStage
 
 class ProjectSummary(BaseModel):
     project_id: str
+    user_id: str | None = None
     name: str
     stage: ProjectStage
     primary_conversation_id: str
@@ -20,4 +21,3 @@ class ChapterDraft(BaseModel):
     title: str
     order: int
     paragraph_count: int
-

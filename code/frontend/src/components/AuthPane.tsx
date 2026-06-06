@@ -7,11 +7,12 @@ type AuthMode = "login" | "register";
 type Props = {
   error: string | null;
   loading: boolean;
+  onModeChange?: () => void;
   onSubmit: (mode: AuthMode, loginId: string, password: string) => void;
 };
 
-export function AuthPane({ error, loading, onSubmit }: Props) {
-  const [mode, setMode] = useState<AuthMode>("login");
+export function AuthPane({ error, loading, onModeChange, onSubmit }: Props) {
+  const [mode, setMode] = useState<AuthMode>("register");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -24,6 +25,11 @@ export function AuthPane({ error, loading, onSubmit }: Props) {
     event.preventDefault();
     if (!canSubmit) return;
     onSubmit(mode, loginId, password);
+  }
+
+  function selectMode(nextMode: AuthMode) {
+    setMode(nextMode);
+    onModeChange?.();
   }
 
   return (
@@ -48,22 +54,22 @@ export function AuthPane({ error, loading, onSubmit }: Props) {
 
         <div className="figma-auth-switch" role="tablist" aria-label="认证方式">
           <button
-            aria-selected={mode === "login"}
-            className={mode === "login" ? "active" : ""}
-            role="tab"
-            type="button"
-            onClick={() => setMode("login")}
-          >
-            登录
-          </button>
-          <button
             aria-selected={mode === "register"}
             className={mode === "register" ? "active" : ""}
             role="tab"
             type="button"
-            onClick={() => setMode("register")}
+            onClick={() => selectMode("register")}
           >
             注册
+          </button>
+          <button
+            aria-selected={mode === "login"}
+            className={mode === "login" ? "active" : ""}
+            role="tab"
+            type="button"
+            onClick={() => selectMode("login")}
+          >
+            登录
           </button>
         </div>
 
