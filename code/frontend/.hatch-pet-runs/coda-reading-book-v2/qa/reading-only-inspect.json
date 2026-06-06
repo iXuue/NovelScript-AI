@@ -1,0 +1,214 @@
+{
+  "ok": false,
+  "frames_root": "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only",
+  "errors": [
+    "expected 8 frame files for running-right, found 0",
+    "expected 8 frame files for running-left, found 0",
+    "expected 4 frame files for waving, found 0",
+    "expected 5 frame files for jumping, found 0",
+    "expected 8 frame files for failed, found 0",
+    "expected 6 frame files for waiting, found 0",
+    "expected 6 frame files for running, found 0",
+    "expected 6 frame files for review, found 0"
+  ],
+  "warnings": [],
+  "rows": [
+    {
+      "state": "idle",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17700,
+          "bbox": [
+            33,
+            5,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 217
+        },
+        {
+          "index": 1,
+          "file": "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17491,
+          "bbox": [
+            34,
+            5,
+            158,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 202
+        },
+        {
+          "index": 2,
+          "file": "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17363,
+          "bbox": [
+            34,
+            5,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 272
+        },
+        {
+          "index": 3,
+          "file": "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17372,
+          "bbox": [
+            34,
+            5,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 251
+        },
+        {
+          "index": 4,
+          "file": "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17268,
+          "bbox": [
+            34,
+            5,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 188
+        },
+        {
+          "index": 5,
+          "file": "E:\\\u4e03\u725b\u4e91\\code\\frontend\\.hatch-pet-runs\\coda-reading-book-v2\\frames-reading-only\\idle\\05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17409,
+          "bbox": [
+            34,
+            5,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 204
+        }
+      ]
+    },
+    {
+      "state": "running-right",
+      "expected_frames": 8,
+      "actual_frames": 0,
+      "extraction_method": null,
+      "ok": false,
+      "errors": [
+        "expected 8 frame files for running-right, found 0"
+      ],
+      "warnings": [],
+      "frames": []
+    },
+    {
+      "state": "running-left",
+      "expected_frames": 8,
+      "actual_frames": 0,
+      "extraction_method": null,
+      "ok": false,
+      "errors": [
+        "expected 8 frame files for running-left, found 0"
+      ],
+      "warnings": [],
+      "frames": []
+    },
+    {
+      "state": "waving",
+      "expected_frames": 4,
+      "actual_frames": 0,
+      "extraction_method": null,
+      "ok": false,
+      "errors": [
+        "expected 4 frame files for waving, found 0"
+      ],
+      "warnings": [],
+      "frames": []
+    },
+    {
+      "state": "jumping",
+      "expected_frames": 5,
+      "actual_frames": 0,
+      "extraction_method": null,
+      "ok": false,
+      "errors": [
+        "expected 5 frame files for jumping, found 0"
+      ],
+      "warnings": [],
+      "frames": []
+    },
+    {
+      "state": "failed",
+      "expected_frames": 8,
+      "actual_frames": 0,
+      "extraction_method": null,
+      "ok": false,
+      "errors": [
+        "expected 8 frame files for failed, found 0"
+      ],
+      "warnings": [],
+      "frames": []
+    },
+    {
+      "state": "waiting",
+      "expected_frames": 6,
+      "actual_frames": 0,
+      "extraction_method": null,
+      "ok": false,
+      "errors": [
+        "expected 6 frame files for waiting, found 0"
+      ],
+      "warnings": [],
+      "frames": []
+    },
+    {
+      "state": "running",
+      "expected_frames": 6,
+      "actual_frames": 0,
+      "extraction_method": null,
+      "ok": false,
+      "errors": [
+        "expected 6 frame files for running, found 0"
+      ],
+      "warnings": [],
+      "frames": []
+    },
+    {
+      "state": "review",
+      "expected_frames": 6,
+      "actual_frames": 0,
+      "extraction_method": null,
+      "ok": false,
+      "errors": [
+        "expected 6 frame files for review, found 0"
+      ],
+      "warnings": [],
+      "frames": []
+    }
+  ]
+}
