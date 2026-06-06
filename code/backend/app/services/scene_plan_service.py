@@ -13,7 +13,7 @@ from app.models.style import StyleProfile
 from app.services.checkpoint_service import create_checkpoint
 from app.services.llm_provider import LLMProvider, LLMRequest
 from app.services.project_service import update_project_stage, update_project_stage_in_db
-from app.services.store import STORE, now_utc
+from app.services.store import STORE, now_utc, persistent_id
 from app.services.style_service import lock_style_source
 
 
@@ -200,7 +200,7 @@ def _replace_scene_plan(db: Session, project_id: str, scenes: list[dict], source
     db.execute(delete(ScenePlan).where(ScenePlan.project_id == project_id))
     timestamp = now_utc()
     scene_plan = ScenePlan(
-        scene_plan_id=STORE.next_id("sp"),
+        scene_plan_id=persistent_id("sp"),
         project_id=project_id,
         status=ArtifactStatus.current,
         confirmed=False,

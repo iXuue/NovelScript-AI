@@ -47,20 +47,28 @@ def generate_scene_plan(project_id: str, db=None, llm_provider: LLMProvider | No
     if db is not None:
         run_id = run["run_id"]
         update_run_status(run_id, "running")
+        print(f"[{project_id}] ▶ 开始生成 Scene Plan")
         update_run_step(project_id, run_id, "chapter_summary", "running")
         update_run_step(project_id, run_id, "evidence_extraction", "running")
         update_run_step(project_id, run_id, "style_profile", "running")
+        print(f"[{project_id}] ⏳ 章节摘要 + 证据索引 + 风格解析 并行中...")
         run_initial_text_analysis(db, project_id, llm_provider)
         update_run_step(project_id, run_id, "chapter_summary", "succeeded", "章节摘要完成")
         update_run_step(project_id, run_id, "evidence_extraction", "succeeded", "证据索引完成")
+        print(f"[{project_id}] ✅ 章节摘要 + 证据索引 完成")
         update_run_step(project_id, run_id, "story_bible", "running")
+        print(f"[{project_id}] ⏳ Story Bible 生成中...")
         generate_story_bible(db, project_id, llm_provider)
         update_run_step(project_id, run_id, "story_bible", "succeeded", "Story Bible 完成")
+        print(f"[{project_id}] ✅ Story Bible 完成")
         generate_style_profile(db, project_id, llm_provider)
         update_run_step(project_id, run_id, "style_profile", "succeeded", "Style Profile 完成")
+        print(f"[{project_id}] ✅ Style Profile 完成")
         update_run_step(project_id, run_id, "scene_plan", "running")
+        print(f"[{project_id}] ⏳ Scene Plan 生成中...")
         scene_plan = generate_scene_plan_artifact(db, project_id, llm_provider)
         update_run_step(project_id, run_id, "scene_plan", "succeeded", "Scene Plan 完成")
+        print(f"[{project_id}] ✅ Scene Plan 完成")
         STORE.scene_plans[project_id] = scene_plan
         update_project_stage(project_id, ProjectStage.scene_plan_draft)
         update_run_status(run_id, "succeeded")
@@ -136,6 +144,8 @@ def generate_script(project_id: str, db=None, llm_provider: LLMProvider | None =
         run_id = run["run_id"]
         update_run_status(run_id, "running")
         update_run_step(project_id, run_id, "script_generation", "running")
+        print(f"[{project_id}] ▶ 开始生成剧本")
+        print(f"[{project_id}] ⏳ 逐场生成剧本 + 校验中...")
         try:
             result = generate_script_from_confirmed_scene_plan(db, project_id, llm_provider)
             update_run_step(project_id, run_id, "script_generation", "succeeded", "剧本生成完成")

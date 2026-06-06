@@ -1274,6 +1274,43 @@ select:disabled {
   min-width: 0;
 }
 
+.figma-composer-main-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.figma-next-step-panel {
+  align-items: center;
+  background: #fffaf7;
+  border: 1px solid var(--studio-line);
+  border-radius: var(--studio-radius);
+  box-shadow: var(--studio-shadow-soft);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin: 14px;
+  padding: 14px;
+}
+
+.figma-next-step-panel strong {
+  color: var(--studio-ink);
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.figma-next-step-panel p {
+  color: var(--studio-muted);
+  margin: 0;
+}
+
+.figma-generate-cta {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
 .figma-attachment-icon {
   background: var(--studio-primary-soft);
   border: 1px solid #efaa98;
@@ -1673,9 +1710,17 @@ select:disabled {
 @media (max-width: 560px) {
   .figma-brand-row,
   .figma-composer-actions,
+  .figma-composer-main-actions,
+  .figma-next-step-panel,
   .figma-result-header .export-menu {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .figma-composer-main-actions .figma-primary,
+  .figma-composer-main-actions .figma-secondary,
+  .figma-next-step-panel .figma-primary {
+    width: 100%;
   }
 
   .figma-composer-field {

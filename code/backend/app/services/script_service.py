@@ -14,7 +14,7 @@ from app.models.style import StyleProfile
 from app.services.export_service import to_yaml_preview
 from app.services.llm_provider import LLMProvider, LLMRequest
 from app.services.project_service import update_project_stage, update_project_stage_in_db
-from app.services.store import STORE, now_utc
+from app.services.store import STORE, now_utc, persistent_id
 
 
 BLOCK_TYPES = {"action", "dialogue", "narration", "transition", "note"}
@@ -172,7 +172,7 @@ def _replace_script_version(db: Session, project_id: str, title: str, scenes: li
     db.execute(delete(ScriptVersion).where(ScriptVersion.project_id == project_id))
     timestamp = now_utc()
     script_version = ScriptVersion(
-        script_version_id=STORE.next_id("script_v"),
+        script_version_id=persistent_id("script_v"),
         project_id=project_id,
         status=ArtifactStatus.current,
         source=source,

@@ -1,9 +1,14 @@
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def persistent_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
 @dataclass

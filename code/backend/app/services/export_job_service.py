@@ -4,7 +4,7 @@ from app.core.paths import export_dir
 from app.models.export import ExportJob
 from app.services.export_service import EXPORT_CONTENT_TYPES, EXPORT_EXTENSIONS, serialize_export
 from app.services.script_service import get_current_internal_script
-from app.services.store import STORE, now_utc
+from app.services.store import persistent_id, now_utc
 
 
 def create_export_job(db, project_id: str, export_format: str) -> dict:
@@ -13,7 +13,7 @@ def create_export_job(db, project_id: str, export_format: str) -> dict:
         raise PermissionError("script_not_ready")
     script_version, internal = current
     content = serialize_export(internal, export_format)
-    export_id = STORE.next_id("exp")
+    export_id = persistent_id("exp")
     filename = f"script.{EXPORT_EXTENSIONS[export_format]}"
     target_dir = export_dir(project_id)
     target_dir.mkdir(parents=True, exist_ok=True)

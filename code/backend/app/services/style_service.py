@@ -4,8 +4,7 @@ from app.domain.artifacts import ProjectStage
 from app.domain.style import StyleSource
 from app.models.style import StyleReferenceFile, StyleSourceRecord
 from app.services.project_service import update_project_stage
-from app.services.store import STORE
-from app.services.store import now_utc
+from app.services.store import STORE, now_utc, persistent_id
 
 
 STYLE_ADAPTER = TypeAdapter(StyleSource)
@@ -90,7 +89,8 @@ def clear_style_source(project_id: str, db=None) -> None:
 def upload_style_reference(project_id: str, filename: str, markdown: str = "", db=None) -> dict:
     if project_id in STORE.style_locked:
         raise PermissionError("style_source_locked")
-    file_id = STORE.next_id("file_style")
+    source = persistent_id if db is not None else STORE.next_id
+    file_id = source("file_style")
     payload = {
         "file_id": file_id,
         "project_id": project_id,
