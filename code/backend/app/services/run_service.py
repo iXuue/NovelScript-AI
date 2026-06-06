@@ -70,14 +70,14 @@ def create_project_run(project_id: str, trigger_type: str, stage: str, steps: li
         {
             "run_step_id": STORE.next_id("step"),
             "step_type": step,
-            "status": RunStatus.succeeded,
-            "summary": f"{step} 完成",
+            "status": RunStatus.queued,
+            "summary": "",
         }
         for step in steps
     ]
     run = {
         "run_id": run_id,
-        "status": RunStatus.succeeded,
+        "status": RunStatus.queued,
         "stage": stage,
         "current_step": None,
         "steps": run_steps,
@@ -89,6 +89,33 @@ def create_project_run(project_id: str, trigger_type: str, stage: str, steps: li
     STORE.runs[run_id] = run
     STORE.active_run_by_project[project_id] = run_id
     return run
+
+
+def update_run_step(project_id: str, run_id: str, step_type: str, status: str, summary: str = "") -> None:
+    run = STORE.runs.get(run_id)
+    if run is None:
+        return
+    for step in run["steps"]:
+        if step["step_type"] == step_type:
+            step["status"] = status
+            step["summary"] = summary
+            break
+    if status == RunStatus.running:
+        run["current_step"] = step_type
+
+
+def update_run_status(run_id: str, status: str, failure_message: str | None = None) -> None:
+    run = STORE.runs.get(run_id)
+    if run is None:
+        return
+    run["status"] = status
+    run["failure_message"] = failure_message
+    if status in (RunStatus.succeeded, RunStatus.failed):
+        run["current_step"] = None
+
+
+def clear_active_run(project_id: str) -> None:
+    STORE.active_run_by_project.pop(project_id, None)
 
 
 def get_run(project_id: str, run_id: str) -> dict | None:
