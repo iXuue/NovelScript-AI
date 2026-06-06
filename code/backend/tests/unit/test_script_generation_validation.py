@@ -2,56 +2,78 @@ import pytest
 
 from app.domain.artifacts import ArtifactStatus
 from app.models.script import ScriptContentBlock, ScriptScene, ScriptVersion
+from app.services.script_service import _replace_script_scene_content, _validate_script_scene_payload
 from app.services.store import now_utc
-from app.services.script_service import _validate_script_scene_payload
-from app.services.script_service import _replace_script_scene_content
 
 
 class SceneStub:
     scene_id = "S001"
-    title = "雨夜归来"
+    title = "Rainy Return"
     source_chapter_ids = ["CH001"]
-    characters = ["她"]
-    scene_function = "建立人物回归"
-    core_conflict = "她是否进入旧宅"
+    source_paragraph_ids = ["CH001_P001"]
+    characters = ["She"]
+    scene_function = "Establish the protagonist's return"
+    core_conflict = "Whether she enters the old house"
 
 
 def test_dialogue_block_requires_speaker():
     payload = {
         "scene_id": "S001",
-        "title": "雨夜归来",
+        "title": "Rainy Return",
         "content_blocks": [
             {
                 "content_block_id": "CB001",
                 "type": "dialogue",
-                "text": "她回来了。",
+                "text": "I am back.",
                 "speaker": None,
-                "source_evidence_ids": ["EV001"],
+                "source_evidence_ids": [],
+                "source_paragraph_ids": ["CH001_P001"],
             }
         ],
     }
 
     with pytest.raises(RuntimeError, match="dialogue block requires speaker"):
-        _validate_script_scene_payload(payload, SceneStub(), {"EV001"})
+        _validate_script_scene_payload(payload, SceneStub(), {"CH001_P001"})
 
 
 def test_invalid_block_type_is_rejected():
     payload = {
         "scene_id": "S001",
-        "title": "雨夜归来",
+        "title": "Rainy Return",
         "content_blocks": [
             {
                 "content_block_id": "CB001",
                 "type": "not_a_real_type",
-                "text": "她想起那封旧信。",
+                "text": "She remembers the old letter.",
                 "speaker": None,
-                "source_evidence_ids": ["EV001"],
+                "source_evidence_ids": [],
+                "source_paragraph_ids": ["CH001_P001"],
             }
         ],
     }
 
     with pytest.raises(RuntimeError, match="block type is invalid"):
-        _validate_script_scene_payload(payload, SceneStub(), {"EV001"})
+        _validate_script_scene_payload(payload, SceneStub(), {"CH001_P001"})
+
+
+def test_unknown_source_paragraph_is_rejected():
+    payload = {
+        "scene_id": "S001",
+        "title": "Rainy Return",
+        "content_blocks": [
+            {
+                "content_block_id": "CB001",
+                "type": "action",
+                "text": "She waits at the gate.",
+                "speaker": None,
+                "source_evidence_ids": [],
+                "source_paragraph_ids": ["CH999_P001"],
+            }
+        ],
+    }
+
+    with pytest.raises(RuntimeError, match="unknown paragraphs"):
+        _validate_script_scene_payload(payload, SceneStub(), {"CH001_P001"})
 
 
 def test_repair_scene_reassigns_block_ids_that_collide_with_later_scenes(test_db):
@@ -70,12 +92,12 @@ def test_repair_scene_reassigns_block_ids_that_collide_with_later_scenes(test_db
         project_id=version.project_id,
         scene_id="S001",
         order=1,
-        title="旧场景",
+        title="Old scene",
         source_chapter_ids=["CH001"],
-        scene_info="旧信息",
+        scene_info="Old info",
         characters=[],
-        scene_purpose="旧目的",
-        core_conflict="旧冲突",
+        scene_purpose="Old purpose",
+        core_conflict="Old conflict",
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -84,12 +106,12 @@ def test_repair_scene_reassigns_block_ids_that_collide_with_later_scenes(test_db
         project_id=version.project_id,
         scene_id="S002",
         order=2,
-        title="后续场景",
+        title="Later scene",
         source_chapter_ids=["CH002"],
-        scene_info="后续信息",
+        scene_info="Later info",
         characters=[],
-        scene_purpose="后续目的",
-        core_conflict="后续冲突",
+        scene_purpose="Later purpose",
+        core_conflict="Later conflict",
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -102,9 +124,10 @@ def test_repair_scene_reassigns_block_ids_that_collide_with_later_scenes(test_db
             content_block_id=f"CB{index:03d}",
             order=index,
             block_type="action",
-            text=f"旧块 {index}",
+            text=f"Old block {index}",
             speaker=None,
             source_evidence_ids=[],
+            source_paragraph_ids=["CH001_P001"],
             created_at=timestamp,
             updated_at=timestamp,
         )
@@ -117,9 +140,10 @@ def test_repair_scene_reassigns_block_ids_that_collide_with_later_scenes(test_db
             content_block_id="CB010",
             order=1,
             block_type="action",
-            text="后续场景块",
+            text="Later scene block",
             speaker=None,
             source_evidence_ids=[],
+            source_paragraph_ids=["CH002_P001"],
             created_at=timestamp,
             updated_at=timestamp,
         )
@@ -128,19 +152,21 @@ def test_repair_scene_reassigns_block_ids_that_collide_with_later_scenes(test_db
     test_db.commit()
 
     repaired_scene = {
-        "title": "修复场景",
+        "title": "Repaired scene",
         "source_chapter_ids": ["CH001"],
-        "scene_info": "新信息",
+        "source_paragraph_ids": ["CH001_P001"],
+        "scene_info": "New info",
         "characters": [],
-        "scene_purpose": "新目的",
-        "core_conflict": "新冲突",
+        "scene_purpose": "New purpose",
+        "core_conflict": "New conflict",
         "content_blocks": [
             {
                 "content_block_id": f"CB{index:03d}",
                 "type": "action",
-                "text": f"新块 {index}",
+                "text": f"New block {index}",
                 "speaker": None,
                 "source_evidence_ids": [],
+                "source_paragraph_ids": ["CH001_P001"],
             }
             for index in range(1, 11)
         ],

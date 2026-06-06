@@ -26,7 +26,8 @@ const scenePlan = {
       order: 1,
       title: "Opening",
       source_chapter_ids: ["CH001"],
-      source_evidence_ids: ["EV001"],
+      source_evidence_ids: [],
+      source_paragraph_ids: ["CH001_P001"],
       location: "Door",
       time: "Night",
       characters: ["Lin"],
@@ -157,7 +158,8 @@ test("App triggers scene plan generation, confirmation, script generation, and e
                   scene_id: "S001",
                   block_type: "action",
                   display_label: "CB001 action",
-                  source_evidence_ids: ["EV001"]
+                  source_evidence_ids: [],
+                  source_paragraph_ids: ["CH001_P001"]
                 }
               ]
             })
@@ -168,7 +170,8 @@ test("App triggers scene plan generation, confirmation, script generation, and e
           content_block_id: "CB001",
           evidence: [
             {
-              source_evidence_id: "EV001",
+              source_evidence_id: null,
+              source_paragraph_id: "CH001_P001",
               chapter_id: "CH001",
               paragraph_ids: ["CH001_P001"],
               text: "original evidence line"
@@ -185,6 +188,7 @@ test("App triggers scene plan generation, confirmation, script generation, and e
   render(<App />);
   await screen.findByText("Interface project");
   await screen.findByText("悬疑/惊悚");
+  expect(within(screen.getByLabelText("对话区")).getAllByRole("button", { name: "开始生成" }).length).toBeGreaterThan(0);
 
   fireEvent.click(screen.getByRole("button", { name: "场景计划" }));
   fireEvent.click(await screen.findByRole("button", { name: "生成场景计划" }));

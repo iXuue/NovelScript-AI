@@ -47,7 +47,8 @@ export function createDemoScenePlan(chapters: ChapterDraft[]): ScenePlan {
       order: index + 1,
       title: chapter.title.replace(/^第.+?章\s*/, "") || chapter.title,
       source_chapter_ids: [chapter.chapter_id],
-      source_evidence_ids: [`EV${String(index + 1).padStart(3, "0")}`],
+      source_evidence_ids: [],
+      source_paragraph_ids: [`${chapter.chapter_id}_P001`],
       interior_exterior: "内景",
       location: "待定地点",
       time: "待定时间",
@@ -85,7 +86,8 @@ export function createDemoScript(projectName: string, scenePlan: ScenePlan): {
     display_label: `${scene.scene_id} 动作 1`,
     text: index === 0 ? "主要角色停在关键地点，行动即将开始。" : "沉默被一句追问打破，冲突继续推进。",
     speaker: null,
-    source_evidence_ids: scene.source_evidence_ids,
+    source_evidence_ids: [],
+    source_paragraph_ids: scene.source_paragraph_ids,
   }));
 
   const yamlScenes = scenePlan.scenes
@@ -116,9 +118,11 @@ ${yamlScenes}
         content_block_id: block.content_block_id,
         evidence: [
           {
-            source_evidence_id: block.source_evidence_ids[0],
+            source_evidence_id: null,
+            source_paragraph_id: block.source_paragraph_ids[0],
             chapter_id: scenePlan.scenes[index].source_chapter_ids[0],
-            paragraph_ids: [`${scenePlan.scenes[index].source_chapter_ids[0]}_P001`],
+            paragraph_id: block.source_paragraph_ids[0] ?? `${scenePlan.scenes[index].source_chapter_ids[0]}_P001`,
+            paragraph_ids: [block.source_paragraph_ids[0] ?? `${scenePlan.scenes[index].source_chapter_ids[0]}_P001`],
             text: index === 0 ? "主要角色准备采取行动。" : "关键线索被重新提出。"
           }
         ]

@@ -72,7 +72,12 @@ REFERENCE_SCRIPTS_SYSTEM_PROMPT = (
 )
 
 
-def generate_style_profile(db: Session, project_id: str, llm_provider: LLMProvider | None) -> StyleProfile | None:
+def generate_style_profile(
+    db: Session,
+    project_id: str,
+    llm_provider: LLMProvider | None,
+    run_id: str | None = None,
+) -> StyleProfile | None:
     source = db.get(StyleSourceRecord, project_id)
     if source is None:
         return None
@@ -92,6 +97,7 @@ def generate_style_profile(db: Session, project_id: str, llm_provider: LLMProvid
             response_format="text",
             db=db,
             project_id=project_id,
+            run_id=run_id,
             step_type="style_profile",
             source_item_count=1,
             included_item_count=1,
@@ -120,6 +126,7 @@ def generate_style_profile(db: Session, project_id: str, llm_provider: LLMProvid
             response_format="text",
             db=db,
             project_id=project_id,
+            run_id=run_id,
             step_type="style_profile",
             source_item_count=len(files),
             included_item_count=len(files),

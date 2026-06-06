@@ -83,6 +83,7 @@ export type ScenePlanScene = {
   title: string;
   source_chapter_ids: string[];
   source_evidence_ids: string[];
+  source_paragraph_ids: string[];
   interior_exterior: string;
   location: string;
   time: string;
@@ -137,12 +138,14 @@ export type ScriptContentBlock = {
   text?: string;
   speaker?: string | null;
   source_evidence_ids: string[];
+  source_paragraph_ids: string[];
 };
 
 export type EvidenceLookupResult = {
   content_block_id: string;
   evidence: Array<{
-    source_evidence_id: string;
+    source_evidence_id?: string | null;
+    source_paragraph_id?: string | null;
     chapter_id: string;
     paragraph_ids: string[];
     text: string;

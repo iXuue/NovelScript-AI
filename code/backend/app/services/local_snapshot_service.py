@@ -284,6 +284,7 @@ def _scene_plan_to_dict(db: Session, project_id: str) -> dict | None:
                 "title": scene.title,
                 "source_chapter_ids": scene.source_chapter_ids,
                 "source_evidence_ids": scene.source_evidence_ids,
+                "source_paragraph_ids": scene.source_paragraph_ids,
                 "interior_exterior": scene.interior_exterior,
                 "location": scene.location,
                 "time": scene.time,

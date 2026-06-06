@@ -5,7 +5,14 @@ import json
 import yaml
 
 
-INTERNAL_KEYS = {"content_block_id", "source_evidence_ids", "paragraph_id", "paragraph_ids", "traceability_index"}
+INTERNAL_KEYS = {
+    "content_block_id",
+    "source_evidence_ids",
+    "source_paragraph_ids",
+    "paragraph_id",
+    "paragraph_ids",
+    "traceability_index",
+}
 EXPORT_EXTENSIONS = {
     "yaml": "yaml",
     "markdown": "md",

@@ -50,12 +50,13 @@ def generate_chapter_summaries(
     db: Session,
     project_id: str,
     llm_provider: LLMProvider | None = None,
+    run_id: str | None = None,
 ) -> list[ChapterSummary]:
     db.execute(delete(ChapterSummary).where(ChapterSummary.project_id == project_id))
     timestamp = now_utc()
     summaries: list[ChapterSummary] = []
     chapters = _analysis_snapshots(db, project_id)
-    payloads = run_summary_payload_generation(chapters, llm_provider, db=db, project_id=project_id)
+    payloads = run_summary_payload_generation(chapters, llm_provider, db=db, project_id=project_id, run_id=run_id)
     for chapter, payload in payloads:
         summary = ChapterSummary(
             project_id=project_id,
@@ -185,13 +186,14 @@ def run_summary_payload_generation(
     llm_provider: LLMProvider | None,
     db=None,
     project_id: str | None = None,
+    run_id: str | None = None,
 ) -> list[tuple[ChapterSnapshot, dict]]:
     if llm_provider is None:
         return [(chapter, _generate_summary_payload(chapter, paragraphs, None)) for chapter, paragraphs in chapters]
 
     if db is not None:
         return [
-            (chapter, _generate_summary_payload(chapter, paragraphs, llm_provider, db=db, project_id=project_id))
+            (chapter, _generate_summary_payload(chapter, paragraphs, llm_provider, db=db, project_id=project_id, run_id=run_id))
             for chapter, paragraphs in chapters
         ]
 
@@ -368,6 +370,7 @@ def _generate_summary_payload(
     llm_provider: LLMProvider | None,
     db=None,
     project_id: str | None = None,
+    run_id: str | None = None,
 ) -> dict:
     if llm_provider is None:
         excerpt = " ".join(paragraph.text for paragraph in paragraphs[:2])
@@ -393,6 +396,7 @@ def _generate_summary_payload(
             response_format="json",
             db=db,
             project_id=project_id,
+            run_id=run_id,
             step_type="chapter_summary",
             chunk_range=_chunk_range(chapter.chapter_id, chunk_index, len(chunks), chunk),
             source_item_count=len(paragraphs),

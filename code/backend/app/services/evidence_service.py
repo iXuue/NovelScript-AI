@@ -1,5 +1,6 @@
 from app.domain.artifacts import ArtifactStatus
 from app.models.analysis import EvidenceItem
+from app.models.chapter import Paragraph
 from app.models.script import ScriptContentBlock, ScriptVersion
 from app.services.store import STORE
 
@@ -36,6 +37,26 @@ def get_evidence_by_content_block(content_block_id: str, project_id: str | None 
         )
         if block is None:
             return {"content_block_id": content_block_id, "evidence": []}
+        if block.source_paragraph_ids:
+            paragraphs = (
+                db.query(Paragraph)
+                .filter(Paragraph.project_id == project_id, Paragraph.paragraph_id.in_(block.source_paragraph_ids))
+                .order_by(Paragraph.chapter_id, Paragraph.order)
+                .all()
+            )
+            return {
+                "content_block_id": content_block_id,
+                "evidence": [
+                    {
+                        "source_paragraph_id": paragraph.paragraph_id,
+                        "source_evidence_id": None,
+                        "chapter_id": paragraph.chapter_id,
+                        "paragraph_id": paragraph.paragraph_id,
+                        "text": paragraph.text,
+                    }
+                    for paragraph in paragraphs
+                ],
+            }
         evidence_items = (
             db.query(EvidenceItem)
             .filter(EvidenceItem.project_id == project_id, EvidenceItem.evidence_id.in_(block.source_evidence_ids))
@@ -47,6 +68,7 @@ def get_evidence_by_content_block(content_block_id: str, project_id: str | None 
             "evidence": [
                 {
                     "source_evidence_id": item.evidence_id,
+                    "source_paragraph_id": None,
                     "chapter_id": item.chapter_id,
                     "paragraph_id": item.paragraph_id,
                     "text": item.quote,
