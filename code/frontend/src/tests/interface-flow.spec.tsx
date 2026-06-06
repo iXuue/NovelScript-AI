@@ -185,6 +185,7 @@ test("App triggers scene plan generation, confirmation, script generation, and e
   render(<App />);
   await screen.findByText("Interface project");
   await screen.findByText("悬疑/惊悚");
+  expect(within(screen.getByLabelText("对话区")).getAllByRole("button", { name: "开始生成" }).length).toBeGreaterThan(0);
 
   fireEvent.click(screen.getByRole("button", { name: "场景计划" }));
   fireEvent.click(await screen.findByRole("button", { name: "生成场景计划" }));

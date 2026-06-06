@@ -9,7 +9,7 @@ from dotenv import dotenv_values
 class Settings:
     app_name: str = "NovelScript AI"
     api_base_url: str = "http://localhost:8000"
-    database_url: str = "postgresql+psycopg://novelscript:novelscript@localhost:5432/novelscript"
+    database_url: str = "postgresql+psycopg://novelscript:novelscript@localhost:5433/novelscript"
     local_developer_logs_enabled: bool = True
     storage_root: str = "/app/storage"
     openai_base_url: str = "https://api.openai.com/v1"
@@ -32,7 +32,7 @@ def get_settings(env_file: str | Path | None = None) -> Settings:
         database_url=_env_value(
             env_values,
             "DATABASE_URL",
-            default="postgresql+psycopg://novelscript:novelscript@localhost:5432/novelscript",
+            default="postgresql+psycopg://novelscript:novelscript@localhost:5433/novelscript",
         ),
         local_developer_logs_enabled=_env_value(env_values, "LOCAL_DEVELOPER_LOGS_ENABLED", default="true").lower()
         == "true",

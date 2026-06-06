@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import previewEmptyArt from "../assets/coda-reading-book-3x.webp";
+import previewEmptyArt from "../assets/coda-reading-book.webp";
 import type { EvidenceLookupResult, ExportFormat, ExportResult, ScenePlan, ScriptCurrentForUi } from "../types";
 import { EvidenceModal } from "./EvidenceModal";
 import { ExportMenu } from "./ExportMenu";
