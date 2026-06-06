@@ -15,6 +15,7 @@ from app.services.context_budget_service import compact_lines, generate_with_con
 from app.services.export_service import to_yaml_preview
 from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage, update_project_stage_in_db
+from app.services.source_id_service import normalize_paragraph_ids
 from app.services.store import STORE, now_utc, persistent_id
 
 
@@ -353,7 +354,9 @@ def _script_scene_prompt(
         "- Preserve required plot, dialogue, visual elements, and foreshadowing from the scene plan.\n"
         "- Block types are only action, dialogue, narration, transition, and note.\n"
         "- For dialogue blocks, speaker must be the character name and cannot be empty. For non-dialogue blocks, speaker must be null.\n"
+        "- If a dialogue speaker is ambiguous, use a concise descriptive speaker such as 围观者, 人群, 旁白, or the closest source character; never omit speaker for dialogue.\n"
         "- Every content block must cite source_paragraph_ids from the source_paragraphs list.\n"
+        "- source_paragraph_ids must never be empty. If one block condenses multiple source paragraphs, cite every relevant paragraph ID from source_paragraphs.\n"
         "- source_evidence_ids is a legacy compatibility field; always return an empty array for it.\n"
         "- Do not include internal notes or analysis in text.\n\n"
         f"scene_plan_scene:\n{_scene_block(scene)}\n\n"
@@ -723,10 +726,13 @@ def _validate_script_scene_payload(payload: dict, scene: ScenePlanScene, paragra
         if not isinstance(source_paragraph_ids, list):
             raise RuntimeError("script_generation source_paragraph_ids must be a list")
         if not source_paragraph_ids:
-            raise RuntimeError("script_generation source_paragraph_ids must be non-empty")
+            raise RuntimeError(f"script_generation {content_block_id} source_paragraph_ids must be non-empty")
         if any(not isinstance(paragraph_id, str) or not paragraph_id.strip() for paragraph_id in source_paragraph_ids):
             raise RuntimeError("script_generation source_paragraph_ids must contain non-empty strings")
-        normalized_source_paragraph_ids = [paragraph_id.strip() for paragraph_id in source_paragraph_ids]
+        normalized_source_paragraph_ids = normalize_paragraph_ids(
+            [paragraph_id.strip() for paragraph_id in source_paragraph_ids],
+            paragraph_ids,
+        )
         unknown_paragraphs = set(normalized_source_paragraph_ids) - paragraph_ids
         if unknown_paragraphs:
             raise RuntimeError(f"script_generation references unknown paragraphs: {sorted(unknown_paragraphs)}")

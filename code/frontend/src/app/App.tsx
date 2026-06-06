@@ -541,7 +541,7 @@ export default function App({ initialYaml }: AppProps) {
             setError("剧本场景校验未通过，请修复失败场景后继续。");
             return;
           }
-          setMode("demo");
+          throw err;
         }
       }
       const generated = createDemoScript(activeProject.name, scenePlan);

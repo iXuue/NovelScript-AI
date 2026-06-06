@@ -30,6 +30,8 @@ def generate_script_endpoint(
         if str(exc) == "script_scene_validation_failed":
             raise api_error(409, "script_scene_validation_failed", "Script scene validation failed")
         raise api_error(409, "scene_plan_not_confirmed", "Scene Plan must be confirmed before script generation")
+    except RuntimeError as exc:
+        raise api_error(502, "script_generation_failed", "Script generation failed", {"reason": str(exc)})
 
 
 @router.get("/projects/{project_id}/scripts/current")

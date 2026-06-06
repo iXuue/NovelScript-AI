@@ -65,11 +65,11 @@ def _read_env_file(env_file: Path) -> dict[str, str]:
 
 def _env_value(env_values: dict[str, str], *keys: str, default: str) -> str:
     for key in keys:
-        value = os.getenv(key)
+        value = env_values.get(key)
         if value is not None:
             return value
     for key in keys:
-        value = env_values.get(key)
+        value = os.getenv(key)
         if value is not None:
             return value
     return default

@@ -152,12 +152,26 @@ test("App triggers scene plan generation, confirmation, script generation, and e
               script_version_id: "script_v001",
               status: "current",
               generated_at: "2026-06-05T00:01:00Z",
+              scenes: [
+                {
+                  scene_id: "S001",
+                  title: "Opening",
+                  source_chapter_ids: ["CH001"],
+                  scene_info: "EXT / Door / Night",
+                  characters: ["Lin"],
+                  scene_purpose: "Open the story",
+                  core_conflict: "Whether to enter",
+                  validation: null
+                }
+              ],
               content_blocks: [
                 {
                   content_block_id: "CB001",
                   scene_id: "S001",
                   block_type: "action",
                   display_label: "CB001 action",
+                  text: "Lin stands at the door.",
+                  speaker: null,
                   source_evidence_ids: [],
                   source_paragraph_ids: ["CH001_P001"]
                 }
@@ -199,8 +213,70 @@ test("App triggers scene plan generation, confirmation, script generation, and e
 
   fireEvent.click(within(screen.getByLabelText("成果区")).getByRole("button", { name: "生成剧本" }));
   await screen.findByText(/title: Interface project/);
+  await screen.findByText("Lin stands at the door.");
   await screen.findByText(/scenes:\s\[\]/);
 
   fireEvent.click(screen.getByRole("button", { name: "CB001 action 来源证据" }));
   await screen.findByText("original evidence line");
+});
+
+test("script generation failure does not show demo script", async () => {
+  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "interface-token");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const path = url.pathname;
+
+      if (method === "GET" && path === "/auth/me") {
+        return jsonResponse({ user_id: "user_interface", login_id: "interface", created_at: "2026-06-06T00:00:00Z" });
+      }
+      if (method === "GET" && path === "/projects") return jsonResponse([{ ...project, stage: "scene_plan_confirmed" }]);
+      if (method === "GET" && path === "/projects/proj_001/conversations/primary/messages") {
+        return jsonResponse({ conversation_id: "conv_001", messages: [] });
+      }
+      if (method === "GET" && path === "/projects/proj_001/style-source") {
+        return jsonResponse({
+          project_id: "proj_001",
+          style_source: { kind: "builtin", builtin_style: "suspense" },
+          style_locked: true
+        });
+      }
+      if (method === "GET" && path === "/projects/proj_001/chapters/pending") {
+        return jsonResponse({ chapters: [] });
+      }
+      if (method === "GET" && path === "/projects/proj_001/scene-plan") {
+        return jsonResponse({ ...scenePlan, confirmed: true });
+      }
+      if (method === "GET" && path === "/projects/proj_001/scripts/current/yaml-preview") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_001/scripts/current") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "POST" && path === "/projects/proj_001/scripts/generate") {
+        return jsonResponse(
+          {
+            error: {
+              code: "script_generation_failed",
+              message: "Script generation failed",
+              details: { reason: "script_generation references unknown paragraphs: ['CH001_P11']" }
+            }
+          },
+          502
+        );
+      }
+      if (method === "GET" && path === "/projects/proj_001/runs/active") return jsonResponse(null);
+
+      return jsonResponse({ error: { code: "not_mocked", message: `${method} ${path}`, details: {} } }, 500);
+    })
+  );
+
+  render(<App />);
+  await screen.findByLabelText("成果区");
+  fireEvent.click(within(screen.getByLabelText("成果区")).getByRole("button", { name: "生成剧本" }));
+
+  expect((await screen.findAllByText(/Script generation failed/)).length).toBeGreaterThan(0);
+  expect(screen.queryByText(/主要角色停在关键地点/)).not.toBeInTheDocument();
 });

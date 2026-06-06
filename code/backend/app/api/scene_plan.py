@@ -32,6 +32,8 @@ def generate_scene_plan_endpoint(
         return generate_scene_plan(project_id, db, llm_provider)
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
+    except RuntimeError as exc:
+        raise api_error(502, "scene_plan_generation_failed", "Scene Plan generation failed", {"reason": str(exc)})
 
 
 @router.get("/projects/{project_id}/scene-plan")
@@ -86,4 +88,6 @@ def repair_scene_plan_endpoint(
         if str(exc) == "repair_attempts_exceeded":
             raise api_error(409, "repair_attempts_exceeded", "Repair attempts exceeded")
         raise api_error(409, "scene_plan_repair_not_required", "Scene Plan repair is not required")
+    except RuntimeError as exc:
+        raise api_error(502, "scene_plan_repair_failed", "Scene Plan repair failed", {"reason": str(exc)})
 

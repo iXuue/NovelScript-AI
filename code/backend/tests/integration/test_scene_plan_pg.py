@@ -92,3 +92,14 @@ def test_scene_plan_confirmation_requires_passed_validation(client):
 
     assert confirm.status_code == 409
     assert confirm.json()["error"]["code"] == "scene_plan_validation_failed"
+
+
+def test_scene_plan_generation_runtime_failure_returns_api_error(client):
+    project_id = _prepare_project(client)
+    client.fake_llm_provider.fail_next_request = True
+
+    generated = client.post(f"/projects/{project_id}/scene-plan/generate")
+
+    assert generated.status_code == 502
+    assert generated.json()["error"]["code"] == "scene_plan_generation_failed"
+    assert generated.json()["error"]["details"]["reason"] == "fake LLM failure"

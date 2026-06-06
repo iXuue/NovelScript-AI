@@ -4,6 +4,7 @@ import previewEmptyArt from "../assets/coda-reading-book.webp";
 import type { EvidenceLookupResult, ExportFormat, ExportResult, ScenePlan, ScriptCurrentForUi } from "../types";
 import { EvidenceModal } from "./EvidenceModal";
 import { ExportMenu } from "./ExportMenu";
+import { ScriptTextPreview } from "./ScriptTextPreview";
 import { YamlPreview } from "./YamlPreview";
 
 type Props = {
@@ -76,8 +77,10 @@ function LegacyResultPane({
       {viewMode === "script" && yaml ? (
         <section className="script-panel">
           <div className="panel-header">
-            <h2>YAML 剧本预览</h2>
+            <h2>剧本文本预览</h2>
           </div>
+          <ScriptTextPreview script={scriptForUi} />
+          <h3>YAML 只读预览</h3>
           <YamlPreview yaml={yaml} />
           <div className="evidence-actions" aria-label="来源证据入口">
             {scriptForUi?.content_blocks.map((block) => (
@@ -220,8 +223,14 @@ export function ResultPane({
           <section className="figma-script-panel">
             <div className="figma-result-title-row">
               <div>
-                <h3>YAML 剧本预览</h3>
+                <h3>剧本文本预览</h3>
                 <p>只读预览。需要修订时，在对话区追加要求。</p>
+              </div>
+            </div>
+            <ScriptTextPreview script={scriptForUi} />
+            <div className="figma-result-title-row yaml-title-row">
+              <div>
+                <h3>YAML 只读预览</h3>
               </div>
             </div>
             <YamlPreview yaml={yaml} />

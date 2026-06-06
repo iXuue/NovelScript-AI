@@ -23,7 +23,7 @@ def test_get_settings_reads_openai_values_from_env_file(tmp_path, monkeypatch):
     assert settings.openai_model == "test-model"
 
 
-def test_uppercase_openai_environment_values_override_env_file(tmp_path, monkeypatch):
+def test_env_file_openai_values_override_process_environment(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text(
         "openai_url=https://from-file.example.test\n"
@@ -31,6 +31,20 @@ def test_uppercase_openai_environment_values_override_env_file(tmp_path, monkeyp
         "openai_model=file-model\n",
         encoding="utf-8",
     )
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://from-env.example.test")
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+    monkeypatch.setenv("OPENAI_MODEL", "env-model")
+
+    settings = get_settings(env_file=env_file)
+
+    assert settings.openai_base_url == "https://from-file.example.test"
+    assert settings.openai_api_key == "file-key"
+    assert settings.openai_model == "file-model"
+
+
+def test_process_environment_is_used_when_env_file_omits_openai_values(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("USE_LOCAL_STORAGE=true\n", encoding="utf-8")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://from-env.example.test")
     monkeypatch.setenv("OPENAI_API_KEY", "env-key")
     monkeypatch.setenv("OPENAI_MODEL", "env-model")

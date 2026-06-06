@@ -15,6 +15,7 @@ from app.services.checkpoint_service import create_checkpoint
 from app.services.context_budget_service import compact_lines, generate_with_context_log, rank_evidence_items, truncate_text
 from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage, update_project_stage_in_db
+from app.services.source_id_service import normalize_paragraph_ids
 from app.services.store import STORE, now_utc, persistent_id
 from app.services.style_service import lock_style_source
 
@@ -376,6 +377,12 @@ def _validate_chapter_scene_plan_payload(payload: dict, chapter: Chapter, paragr
             validated[field] = value
         if not validated["source_paragraph_ids"]:
             raise RuntimeError("scene_plan_chapter source_paragraph_ids must be non-empty")
+        if any(not isinstance(paragraph_id, str) or not paragraph_id.strip() for paragraph_id in validated["source_paragraph_ids"]):
+            raise RuntimeError("scene_plan_chapter source_paragraph_ids must contain non-empty strings")
+        validated["source_paragraph_ids"] = normalize_paragraph_ids(
+            [paragraph_id.strip() for paragraph_id in validated["source_paragraph_ids"]],
+            paragraph_ids,
+        )
         unknown_paragraphs = set(validated["source_paragraph_ids"]) - paragraph_ids
         if unknown_paragraphs:
             raise RuntimeError(f"scene_plan_chapter references unknown paragraphs: {sorted(unknown_paragraphs)}")
@@ -712,6 +719,12 @@ def _validate_scene_plan_payload(payload: dict, chapter_ids: set[str], paragraph
             raise RuntimeError("scene_plan scene_id must be unique")
         if validated["scene_id"] != f"S{expected_order:03d}":
             raise RuntimeError("scene_plan scene_id must match scene order")
+        if any(not isinstance(paragraph_id, str) or not paragraph_id.strip() for paragraph_id in validated["source_paragraph_ids"]):
+            raise RuntimeError("scene_plan scene field source_paragraph_ids must contain non-empty strings")
+        validated["source_paragraph_ids"] = normalize_paragraph_ids(
+            [paragraph_id.strip() for paragraph_id in validated["source_paragraph_ids"]],
+            paragraph_ids,
+        )
         unknown_chapters = set(validated["source_chapter_ids"]) - chapter_ids
         unknown_paragraphs = set(validated["source_paragraph_ids"]) - paragraph_ids
         if unknown_chapters:
