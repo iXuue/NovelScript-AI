@@ -147,7 +147,8 @@ export type EvidenceLookupResult = {
     source_evidence_id?: string | null;
     source_paragraph_id?: string | null;
     chapter_id: string;
-    paragraph_ids: string[];
+    paragraph_id?: string | null;
+    paragraph_ids?: string[];
     text: string;
   }>;
 };

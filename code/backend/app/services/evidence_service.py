@@ -52,6 +52,7 @@ def get_evidence_by_content_block(content_block_id: str, project_id: str | None 
                         "source_evidence_id": None,
                         "chapter_id": paragraph.chapter_id,
                         "paragraph_id": paragraph.paragraph_id,
+                        "paragraph_ids": [paragraph.paragraph_id],
                         "text": paragraph.text,
                     }
                     for paragraph in paragraphs
@@ -71,6 +72,7 @@ def get_evidence_by_content_block(content_block_id: str, project_id: str | None 
                     "source_paragraph_id": None,
                     "chapter_id": item.chapter_id,
                     "paragraph_id": item.paragraph_id,
+                    "paragraph_ids": item.paragraph_ids or ([item.paragraph_id] if item.paragraph_id else []),
                     "text": item.quote,
                 }
                 for item in evidence_items

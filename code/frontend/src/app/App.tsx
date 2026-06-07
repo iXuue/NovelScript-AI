@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 
 import {
   ApiRequestError,
@@ -84,6 +85,24 @@ const TEST_MODE_USER: AuthUser = {
   login_id: "local-test",
   created_at: "2026-06-06T00:00:00.000Z"
 };
+const RESULT_PANEL_DEFAULT_WIDTH = 420;
+const RESULT_PANEL_MIN_WIDTH = 320;
+const RESULT_PANEL_MAX_WIDTH = 720;
+const WORKSPACE_RESIZER_WIDTH = 10;
+const WORKSPACE_MIN_CONVERSATION_WIDTH = 360;
+const WORKSPACE_SIDEBAR_WIDTH = 248;
+const WORKSPACE_COLLAPSED_SIDEBAR_WIDTH = 72;
+
+function clampResultPanelWidth(width: number, sidebarCollapsed: boolean): number {
+  if (typeof window === "undefined") {
+    return Math.min(RESULT_PANEL_MAX_WIDTH, Math.max(RESULT_PANEL_MIN_WIDTH, width));
+  }
+
+  const sidebarWidth = sidebarCollapsed ? WORKSPACE_COLLAPSED_SIDEBAR_WIDTH : WORKSPACE_SIDEBAR_WIDTH;
+  const availableMax = window.innerWidth - sidebarWidth - WORKSPACE_MIN_CONVERSATION_WIDTH - WORKSPACE_RESIZER_WIDTH;
+  const maxWidth = Math.max(RESULT_PANEL_MIN_WIDTH, Math.min(RESULT_PANEL_MAX_WIDTH, availableMax));
+  return Math.min(maxWidth, Math.max(RESULT_PANEL_MIN_WIDTH, width));
+}
 
 function readStoredAuthToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -214,12 +233,43 @@ export default function App({ initialYaml }: AppProps) {
   const [latestExport, setLatestExport] = useState<ExportResult | null>(null);
   const [uploadedNovelName, setUploadedNovelName] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
+  const [resultPanelWidth, setResultPanelWidth] = useState(RESULT_PANEL_DEFAULT_WIDTH);
 
   const activeProject = useMemo(
     () => (activeProjectId ? projects.find((project) => project.project_id === activeProjectId) ?? null : null),
     [activeProjectId, projects]
   );
   const canCreateProject = newProjectName.trim().length > 0;
+  const workspaceStyle = {
+    "--figma-result-panel-width": `${resultPanelWidth}px`
+  } as CSSProperties;
+
+  const handleResultPanelResizeStart = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      if (!Number.isFinite(event.clientX)) return;
+
+      const startX = event.clientX;
+      const startWidth = resultPanelWidth;
+      document.body.classList.add("figma-resizing-result-panel");
+
+      function handleMouseMove(moveEvent: MouseEvent) {
+        if (!Number.isFinite(moveEvent.clientX)) return;
+        const nextWidth = startWidth + startX - moveEvent.clientX;
+        setResultPanelWidth(clampResultPanelWidth(nextWidth, sidebarCollapsed));
+      }
+
+      function handleMouseUp() {
+        document.body.classList.remove("figma-resizing-result-panel");
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      }
+
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp, { once: true });
+    },
+    [resultPanelWidth, sidebarCollapsed]
+  );
 
   const setActiveProjectPatch = useCallback(
     (patch: Partial<ProjectSummary>) => {
@@ -841,7 +891,7 @@ export default function App({ initialYaml }: AppProps) {
   }
 
   return (
-    <div className="figma-workspace">
+    <div className="figma-workspace" style={workspaceStyle}>
       <header className="topbar">
         <div className="brand-block">
           <div className="product-name">NovelScript AI</div>
@@ -931,6 +981,12 @@ export default function App({ initialYaml }: AppProps) {
             </div>
           </main>
         )}
+        <button
+          aria-label="拖动调整剧本预览宽度"
+          className="figma-result-resizer"
+          type="button"
+          onMouseDown={handleResultPanelResizeStart}
+        />
         <ResultPane
           activeLabel={loadingLabel}
           failedStage={failedStage}
