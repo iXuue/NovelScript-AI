@@ -34,11 +34,15 @@ class FakeAnalysisLLMProvider(LLMProvider):
             text = json_dumps(
                 {
                     "summary": "Chapter summary",
+                    "narrative_function": "Establish the protagonist's return and set up the central mystery.",
                     "key_events": ["She returns"],
                     "characters": ["She"],
                     "locations": ["Old house"],
                     "conflicts": ["Unknown resistance after returning"],
+                    "emotional_beats": ["tension", "nostalgia"],
                     "foreshadowing": ["Old letter"],
+                    "dialogue_candidates": ["I am back."],
+                    "visual_elements": ["Rainy night", "Old house gate"],
                     "adaptation_suggestions": ["Keep the rainy return as the main visual beat"],
                 }
             )

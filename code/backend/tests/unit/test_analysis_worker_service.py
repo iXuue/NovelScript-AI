@@ -51,8 +51,9 @@ class BlockingProvider(LLMProvider):
             self.events.append((request.task_type, "end", time.perf_counter()))
         if request.task_type == "chapter_summary":
             text = (
-                '{"summary":"并发摘要","key_events":[],"characters":[],"locations":[],'
-                '"conflicts":[],"foreshadowing":[],"adaptation_suggestions":[]}'
+                '{"summary":"并发摘要","narrative_function":"并发叙事功能","key_events":[],"characters":[],"locations":[],'
+                '"conflicts":[],"emotional_beats":[],"foreshadowing":[],"dialogue_candidates":[],'
+                '"visual_elements":[],"adaptation_suggestions":[]}'
             )
         else:
             paragraph_id = "CH002_P001" if "- CH002_P001:" in request.prompt else "CH001_P001"
@@ -79,8 +80,9 @@ class ChunkTrackingProvider(LLMProvider):
                 break
         if request.task_type == "chapter_summary":
             text = (
-                '{"summary":"分块摘要","key_events":["分块事件"],"characters":[],"locations":[],'
-                '"conflicts":[],"foreshadowing":[],"adaptation_suggestions":[]}'
+                '{"summary":"分块摘要","narrative_function":"分块叙事功能","key_events":["分块事件"],"characters":[],"locations":[],'
+                '"conflicts":[],"emotional_beats":[],"foreshadowing":[],"dialogue_candidates":[],'
+                '"visual_elements":[],"adaptation_suggestions":[]}'
             )
         else:
             text = (

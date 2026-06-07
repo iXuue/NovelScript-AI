@@ -63,11 +63,15 @@ def generate_chapter_summaries(
             chapter_id=chapter.chapter_id,
             title=chapter.title,
             summary=payload["summary"],
+            narrative_function=payload["narrative_function"],
             key_events=payload["key_events"],
             characters=payload["characters"],
             locations=payload["locations"],
             conflicts=payload["conflicts"],
+            emotional_beats=payload["emotional_beats"],
             foreshadowing=payload["foreshadowing"],
+            dialogue_candidates=payload["dialogue_candidates"],
+            visual_elements=payload["visual_elements"],
             adaptation_suggestions=payload["adaptation_suggestions"],
             source=payload["source"],
             created_at=timestamp,
@@ -376,11 +380,15 @@ def _generate_summary_payload(
         excerpt = " ".join(paragraph.text for paragraph in paragraphs[:2])
         return {
             "summary": excerpt or chapter.raw_text[:300] or f"{chapter.title} 待摘要。",
+            "narrative_function": f"{chapter.title} 的情节推进。",
             "key_events": [paragraph.text for paragraph in paragraphs[:3]],
             "characters": [],
             "locations": [],
             "conflicts": [],
+            "emotional_beats": [],
             "foreshadowing": [],
+            "dialogue_candidates": [],
+            "visual_elements": [],
             "adaptation_suggestions": ["保留本章已确认段落中的关键情节。"],
             "source": "deterministic_stub",
         }
@@ -408,11 +416,15 @@ def _generate_summary_payload(
         payloads.append(
             {
                 "summary": _required_text(data, "summary", "chapter_summary"),
+                "narrative_function": _required_text(data, "narrative_function", "chapter_summary"),
                 "key_events": _required_list(data, "key_events", "chapter_summary"),
                 "characters": _required_list(data, "characters", "chapter_summary"),
                 "locations": _required_list(data, "locations", "chapter_summary"),
                 "conflicts": _required_list(data, "conflicts", "chapter_summary"),
+                "emotional_beats": _required_list(data, "emotional_beats", "chapter_summary"),
                 "foreshadowing": _required_list(data, "foreshadowing", "chapter_summary"),
+                "dialogue_candidates": _required_list(data, "dialogue_candidates", "chapter_summary"),
+                "visual_elements": _required_list(data, "visual_elements", "chapter_summary"),
                 "adaptation_suggestions": _required_list(data, "adaptation_suggestions", "chapter_summary"),
             }
         )
@@ -491,11 +503,17 @@ def _merge_unique(items: list) -> list:
 def _merge_summary_payloads(payloads: list[dict], source: str) -> dict:
     return {
         "summary": truncate_text("\n".join(payload["summary"] for payload in payloads if payload.get("summary")), 4000),
+        "narrative_function": truncate_text(
+            "\n".join(payload["narrative_function"] for payload in payloads if payload.get("narrative_function")), 2000
+        ),
         "key_events": _merge_unique([item for payload in payloads for item in payload["key_events"]]),
         "characters": _merge_unique([item for payload in payloads for item in payload["characters"]]),
         "locations": _merge_unique([item for payload in payloads for item in payload["locations"]]),
         "conflicts": _merge_unique([item for payload in payloads for item in payload["conflicts"]]),
+        "emotional_beats": _merge_unique([item for payload in payloads for item in payload["emotional_beats"]]),
         "foreshadowing": _merge_unique([item for payload in payloads for item in payload["foreshadowing"]]),
+        "dialogue_candidates": _merge_unique([item for payload in payloads for item in payload["dialogue_candidates"]]),
+        "visual_elements": _merge_unique([item for payload in payloads for item in payload["visual_elements"]]),
         "adaptation_suggestions": _merge_unique(
             [item for payload in payloads for item in payload["adaptation_suggestions"]]
         ),
@@ -578,15 +596,21 @@ def _chapter_summary_prompt(chapter: Chapter, paragraphs: list[Paragraph]) -> st
         "你是小说改编分析 Worker。请为已确认小说章节生成结构化章节摘要。\n"
         "硬性规则：只基于给定段落，不要编造；不能改写原文事实；不确定时使用空数组。\n"
         "必须覆盖：本章发生了什么、关键事件、人物、地点、冲突、伏笔、适合改编的场景、改编建议、遗漏风险。\n"
+        "新增字段：narrative_function 描述本章叙事功能；dialogue_candidates 列出值得保留的对白候选；"
+        "visual_elements 列出可视觉化的描写；emotional_beats 列出情绪节点。\n"
         "只输出 JSON object，不要 Markdown，不要解释。\n"
         "JSON schema 示例：\n"
         "{\n"
         '  "summary": "非空字符串",\n'
+        '  "narrative_function": "非空字符串，描述本章在整体故事中的叙事功能",\n'
         '  "key_events": ["事件"],\n'
         '  "characters": ["人物"],\n'
         '  "locations": ["地点"],\n'
         '  "conflicts": ["冲突"],\n'
+        '  "emotional_beats": ["情绪节点，如紧张、温情、绝望"],\n'
         '  "foreshadowing": ["伏笔"],\n'
+        '  "dialogue_candidates": ["值得保留的对白片段"],\n'
+        '  "visual_elements": ["可视觉化的描写、场景、动作"],\n'
         '  "adaptation_suggestions": ["改编建议，包含遗漏风险"]\n'
         "}\n"
         f"chapter_id: {chapter.chapter_id}\n"
