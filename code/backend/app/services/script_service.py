@@ -432,20 +432,23 @@ def _next_content_block_number(used_block_ids: set[str]) -> int:
 def _target_scene_ids_from_feedback(scene_plan: ScenePlan, feedback_plan: dict) -> set[str]:
     target = feedback_plan.get("target") or {}
     target_type = target.get("type")
-    if target_type == "scene":
-        return {target["scene_id"]} if target.get("scene_id") else set()
-    if target_type == "chapter":
-        chapter_id = target.get("chapter_id")
-        if not chapter_id:
+    if target_type == "chapters":
+        chapter_ids = {str(chapter_id).strip() for chapter_id in target.get("chapter_ids") or [] if str(chapter_id).strip()}
+        if not chapter_ids:
             return set()
         return {
             scene.scene_id
             for scene in scene_plan.scenes
-            if chapter_id in (scene.source_chapter_ids or [])
+            if chapter_ids.intersection(scene.source_chapter_ids or [])
         }
     affected_scope = feedback_plan.get("modification_plan", {}).get("affected_scope") if isinstance(feedback_plan.get("modification_plan"), dict) else {}
-    scene_ids = affected_scope.get("scene_ids") if isinstance(affected_scope, dict) else []
-    return {str(scene_id) for scene_id in scene_ids or [] if str(scene_id).strip()}
+    chapter_ids = affected_scope.get("chapter_ids") if isinstance(affected_scope, dict) else []
+    normalized_chapter_ids = {str(chapter_id).strip() for chapter_id in chapter_ids or [] if str(chapter_id).strip()}
+    return {
+        scene.scene_id
+        for scene in scene_plan.scenes
+        if normalized_chapter_ids.intersection(scene.source_chapter_ids or [])
+    }
 
 
 def _script_scene_payload_from_existing(script_scene: ScriptScene, content_blocks: list[ScriptContentBlock]) -> dict:
@@ -518,7 +521,8 @@ def _script_scene_prompt(
         "- Every content block must cite source_paragraph_ids from the source_paragraphs list.\n"
         "- source_paragraph_ids must never be empty. If one block condenses multiple source paragraphs, cite every relevant paragraph ID from source_paragraphs.\n"
         "- source_evidence_ids is a legacy compatibility field; always return an empty array for it.\n"
-        "- If a confirmed_feedback_plan is provided, revise the target scene according to it while preserving source facts.\n"
+        "- If a confirmed_feedback_plan is provided, revise only screenplay text for the selected chapter range while preserving source facts.\n"
+        "- The Scene Plan is already confirmed; do not change scene_id, scene order, source chapter links, or source paragraph links.\n"
         "- Do not include internal notes or analysis in text.\n\n"
         f"scene_plan_scene:\n{_scene_block(scene)}\n\n"
         f"source_paragraphs:\n{_paragraph_block(paragraphs)}\n\n"

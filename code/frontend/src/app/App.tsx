@@ -70,11 +70,12 @@ type AppProps = {
   initialYaml?: string;
 };
 
-type FeedbackTargetOption = {
-  key: string;
+type FeedbackChapterOption = {
+  chapterId: string;
   label: string;
-  target: FeedbackTarget;
 };
+
+type FeedbackTargetMode = "script" | "chapters";
 
 const AUTH_TOKEN_STORAGE_KEY = "novelscript_auth_token";
 const TEST_MODE_STORAGE_KEY = "novelscript_test_mode";
@@ -181,6 +182,7 @@ export default function App({ initialYaml }: AppProps) {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(initialWorkspaceProject?.project_id ?? null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [viewMode, setViewMode] = useState<WorkspaceView>(initialYaml ? "script" : "conversation");
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
   const [chapters, setChapters] = useState<ChapterDraft[]>([]);
   const [chaptersConfirmed, setChaptersConfirmed] = useState(false);
   const [styleSourceValue, setStyleSourceValue] = useState<StyleSource | null>(null);
@@ -201,7 +203,8 @@ export default function App({ initialYaml }: AppProps) {
   const [fallbackEvidence, setFallbackEvidence] = useState<Record<string, EvidenceLookupResult>>({});
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [pendingFeedbackPlan, setPendingFeedbackPlan] = useState<FeedbackPlan | null>(null);
-  const [feedbackTargetKey, setFeedbackTargetKey] = useState("script");
+  const [feedbackTargetMode, setFeedbackTargetMode] = useState<FeedbackTargetMode>("script");
+  const [selectedFeedbackChapterIds, setSelectedFeedbackChapterIds] = useState<string[]>([]);
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingLabel, setLoadingLabel] = useState<string | null>(null);
@@ -323,16 +326,30 @@ export default function App({ initialYaml }: AppProps) {
     setStyleLocked(false);
     setScenePlan(null);
     setScenePlanConfirmed(false);
+    setSelectedSceneId(null);
     setScriptPreview(null);
     setScriptForUi(null);
     setFallbackEvidence({});
     setMessages([]);
     setPendingFeedbackPlan(null);
-    setFeedbackTargetKey("script");
+    setFeedbackTargetMode("script");
+    setSelectedFeedbackChapterIds([]);
     setLatestExport(null);
     setUploadedNovelName(null);
     setFailedStage(null);
     setError(null);
+  }
+
+  function handleSelectView(view: WorkspaceView) {
+    setViewMode(view);
+    if (view !== "scene-plan" || selectedSceneId) {
+      setSelectedSceneId(null);
+    }
+  }
+
+  function handleSelectScene(sceneId: string) {
+    setSelectedSceneId(sceneId);
+    setViewMode("scene-plan");
   }
 
   function persistAuthSession(session: AuthSession) {
@@ -602,42 +619,69 @@ export default function App({ initialYaml }: AppProps) {
     });
   }
 
-  const feedbackTargetOptions = useMemo<FeedbackTargetOption[]>(() => {
-    if (scriptForUi) {
-      const options: FeedbackTargetOption[] = [{ key: "script", label: "整部剧本", target: { type: "script" } }];
-      const chapterIds = new Set<string>();
-      for (const scene of scriptForUi.scenes) {
-        for (const chapterId of scene.source_chapter_ids) {
-          chapterIds.add(chapterId);
-        }
+  const feedbackChapterOptions = useMemo<FeedbackChapterOption[]>(() => {
+    if (!scriptForUi) return [];
+    const chapterIds = new Set<string>();
+    for (const scene of scriptForUi.scenes) {
+      for (const chapterId of scene.source_chapter_ids) {
+        chapterIds.add(chapterId);
       }
-      for (const chapterId of chapterIds) {
-        options.push({ key: `chapter:${chapterId}`, label: `章节 ${chapterId}`, target: { type: "chapter", chapter_id: chapterId } });
-      }
-      for (const scene of scriptForUi.scenes) {
-        options.push({ key: `scene:${scene.scene_id}`, label: `${scene.scene_id} ${scene.title}`, target: { type: "scene", scene_id: scene.scene_id } });
-      }
-      return options;
     }
-    if (scenePlan) {
-      return [{ key: "scene_plan", label: "场景规划", target: { type: "scene_plan" } }];
-    }
-    return [];
-  }, [scenePlan, scriptForUi]);
+    return Array.from(chapterIds)
+      .sort()
+      .map((chapterId) => {
+        const chapter = chapters.find((item) => item.chapter_id === chapterId);
+        return {
+          chapterId,
+          label: chapter ? `剧本章节：第 ${chapter.order} 章 ${chapter.title}` : `剧本章节：${chapterId}`
+        };
+      });
+  }, [chapters, scriptForUi]);
 
   useEffect(() => {
-    if (feedbackTargetOptions.length === 0) {
-      if (feedbackTargetKey !== "script") setFeedbackTargetKey("script");
+    if (!scriptForUi) {
+      if (feedbackTargetMode !== "script") setFeedbackTargetMode("script");
+      if (selectedFeedbackChapterIds.length > 0) setSelectedFeedbackChapterIds([]);
       return;
     }
-    if (!feedbackTargetOptions.some((option) => option.key === feedbackTargetKey)) {
-      setFeedbackTargetKey(feedbackTargetOptions[0].key);
+    const availableChapterIds = new Set(feedbackChapterOptions.map((option) => option.chapterId));
+    const filteredChapterIds = selectedFeedbackChapterIds.filter((chapterId) => availableChapterIds.has(chapterId));
+    if (filteredChapterIds.length !== selectedFeedbackChapterIds.length) {
+      setSelectedFeedbackChapterIds(filteredChapterIds);
     }
-  }, [feedbackTargetKey, feedbackTargetOptions]);
+    if (feedbackTargetMode === "chapters" && filteredChapterIds.length === 0) {
+      setFeedbackTargetMode("script");
+    }
+  }, [feedbackChapterOptions, feedbackTargetMode, scriptForUi, selectedFeedbackChapterIds]);
 
   function buildFeedbackTarget(): FeedbackTarget | null {
-    const selected = feedbackTargetOptions.find((option) => option.key === feedbackTargetKey);
-    return selected?.target ?? feedbackTargetOptions[0]?.target ?? null;
+    if (scriptForUi) {
+      if (feedbackTargetMode === "chapters" && selectedFeedbackChapterIds.length > 0) {
+        return { type: "chapters", chapter_ids: selectedFeedbackChapterIds };
+      }
+      return { type: "script" };
+    }
+    if (scenePlan && !scenePlanConfirmed) {
+      return { type: "scene_plan" };
+    }
+    return null;
+  }
+
+  function handleFeedbackTargetModeChange(mode: FeedbackTargetMode) {
+    setFeedbackTargetMode(mode);
+    if (mode === "script") {
+      setSelectedFeedbackChapterIds([]);
+    }
+  }
+
+  function handleFeedbackChapterToggle(chapterId: string, selected: boolean) {
+    setSelectedFeedbackChapterIds((current) => {
+      const next = selected
+        ? Array.from(new Set([...current, chapterId]))
+        : current.filter((item) => item !== chapterId);
+      setFeedbackTargetMode(next.length > 0 ? "chapters" : "script");
+      return next;
+    });
   }
 
   function handleSubmitMessage(content: string) {
@@ -767,6 +811,13 @@ export default function App({ initialYaml }: AppProps) {
     (chapters.length > 0 || Boolean(uploadedNovelName) || Boolean(activeProject && HAS_UPLOAD_STAGES.has(activeProject.stage)));
   const canGenerateScenePlan = chaptersConfirmed && Boolean(styleSourceValue) && !scenePlan;
   const canGenerateScript = Boolean(scenePlan && scenePlanConfirmed && !scriptPreview);
+  useEffect(() => {
+    if (!selectedSceneId) return;
+    if (!scenePlan?.scenes.some((scene) => scene.scene_id === selectedSceneId)) {
+      setSelectedSceneId(null);
+    }
+  }, [scenePlan, selectedSceneId]);
+
   const statusText = useMemo(() => {
     if (!activeProject) return "等待项目创建";
     if (!hasNovelUpload) return "正在等待用户上传";
@@ -825,6 +876,7 @@ export default function App({ initialYaml }: AppProps) {
           newProjectName={newProjectName}
           projects={projects}
           scenePlan={scenePlan}
+          selectedSceneId={selectedSceneId}
           statusMessage={statusMessage}
           viewMode={viewMode}
           onNewProject={handleNewProject}
@@ -834,7 +886,8 @@ export default function App({ initialYaml }: AppProps) {
             setActiveProjectId(projectId);
             resetArtifactsForProject();
           }}
-          onSelectView={setViewMode}
+          onSelectScene={handleSelectScene}
+          onSelectView={handleSelectView}
           onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
         />
         {activeProject ? (
@@ -848,8 +901,9 @@ export default function App({ initialYaml }: AppProps) {
             loading={loading}
             messages={messages}
             pendingFeedbackPlan={pendingFeedbackPlan}
-            feedbackTargetOptions={feedbackTargetOptions}
-            selectedFeedbackTargetKey={feedbackTargetKey}
+            feedbackChapterOptions={feedbackChapterOptions}
+            feedbackTargetMode={feedbackTargetMode}
+            selectedFeedbackChapterIds={selectedFeedbackChapterIds}
             mode={mode}
             projectName={activeProject.name}
             selectedStyle={styleSourceValue}
@@ -861,7 +915,8 @@ export default function App({ initialYaml }: AppProps) {
             onGenerateScript={handleGenerateScript}
             onConfirmFeedbackPlan={handleConfirmFeedbackPlan}
             onCancelFeedbackPlan={handleCancelFeedbackPlan}
-            onFeedbackTargetChange={setFeedbackTargetKey}
+            onFeedbackTargetModeChange={handleFeedbackTargetModeChange}
+            onFeedbackChapterToggle={handleFeedbackChapterToggle}
             onNovelSelected={handleNovelSelected}
             onStyleChange={handleStyleSourceChange}
             onStyleReferenceSelected={handleStyleReferenceSelected}
@@ -886,6 +941,7 @@ export default function App({ initialYaml }: AppProps) {
           projectId={activeProject?.project_id ?? ""}
           scenePlan={scenePlan}
           scenePlanConfirmed={scenePlanConfirmed}
+          selectedSceneId={selectedSceneId}
           scriptForUi={scriptForUi}
           statusText={statusText}
           viewMode={viewMode}

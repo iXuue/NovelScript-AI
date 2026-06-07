@@ -225,7 +225,7 @@ export async function sendMessage(
 export async function modifyScript(
   projectId: string,
   message: string,
-  target: { type: "scene" | "chapter" | "script"; scene_id?: string; chapter_id?: string }
+  target: FeedbackTarget
 ): Promise<FeedbackPlan> {
   return requestJson(`/projects/${projectId}/conversations/primary/modify-script`, {
     method: "POST",

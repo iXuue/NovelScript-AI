@@ -13,7 +13,7 @@ from app.models.script import ScriptVersion
 from app.services.store import now_utc, persistent_id
 
 
-VALID_TARGET_TYPES = {"scene_plan", "script", "chapter", "scene"}
+VALID_TARGET_TYPES = {"scene_plan", "script", "chapters"}
 
 
 def normalize_feedback_text(text: str) -> str:
@@ -29,16 +29,11 @@ def normalize_target(target: dict[str, Any]) -> dict[str, Any]:
     if target_type not in VALID_TARGET_TYPES:
         raise ValueError(f"unsupported feedback target type: {target_type}")
     normalized: dict[str, Any] = {"type": target_type}
-    if target_type == "scene":
-        scene_id = str(target.get("scene_id") or "").strip()
-        if not scene_id:
-            raise ValueError("scene feedback target requires scene_id")
-        normalized["scene_id"] = scene_id
-    if target_type == "chapter":
-        chapter_id = str(target.get("chapter_id") or "").strip()
-        if not chapter_id:
-            raise ValueError("chapter feedback target requires chapter_id")
-        normalized["chapter_id"] = chapter_id
+    if target_type == "chapters":
+        chapter_ids = sorted({str(chapter_id).strip() for chapter_id in target.get("chapter_ids") or [] if str(chapter_id).strip()})
+        if not chapter_ids:
+            raise ValueError("chapters feedback target requires chapter_ids")
+        normalized["chapter_ids"] = chapter_ids
     return normalized
 
 
@@ -48,10 +43,8 @@ def stage_for_target(target: dict[str, Any]) -> str:
 
 def scope_id_for_target(target: dict[str, Any]) -> str:
     target_type = target["type"]
-    if target_type == "scene":
-        return target["scene_id"]
-    if target_type == "chapter":
-        return target["chapter_id"]
+    if target_type == "chapters":
+        return ",".join(target["chapter_ids"])
     return target_type
 
 

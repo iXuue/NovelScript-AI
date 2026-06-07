@@ -101,16 +101,18 @@ def test_script_feedback_confirmation_regenerates_script_version(client):
         db.close()
 
 
-def test_scene_target_feedback_only_replaces_target_scene(client):
+def test_chapter_target_feedback_only_replaces_selected_chapter_scenes(client):
     project_id = _prepare_script_project(client, chapters=2)
     before = client.get(f"/projects/{project_id}/scripts/current").json()
 
     plan = client.post(
         f"/projects/{project_id}/conversations/primary/feedback-plan",
-        json={"message": "Only revise the first scene.", "target": {"type": "scene", "scene_id": "S001"}},
+        json={"message": "Only revise the first chapter.", "target": {"type": "chapters", "chapter_ids": ["CH001"]}},
     )
     assert plan.status_code == 200
-    assert plan.json()["modification_plan"]["intent"] == "modify_scene"
+    assert plan.json()["target_type"] == "chapters"
+    assert plan.json()["modification_plan"]["intent"] == "modify_chapter"
+    assert plan.json()["modification_plan"]["affected_scope"]["chapter_ids"] == ["CH001"]
 
     confirmed = client.post(
         f"/projects/{project_id}/conversations/primary/feedback-plan/{plan.json()['feedback_plan_id']}/confirm"
@@ -120,5 +122,39 @@ def test_scene_target_feedback_only_replaces_target_scene(client):
     current = client.get(f"/projects/{project_id}/scripts/current").json()
     before_by_scene = {block["scene_id"]: block["text"] for block in before["content_blocks"] if block["block_type"] == "action"}
     current_by_scene = {block["scene_id"]: block["text"] for block in current["content_blocks"] if block["block_type"] == "action"}
-    assert current_by_scene["S001"] == "Feedback revised scene from the confirmed plan."
-    assert current_by_scene["S002"] == before_by_scene["S002"]
+    target_scene_ids = {
+        scene["scene_id"]
+        for scene in before["scenes"]
+        if "CH001" in scene["source_chapter_ids"]
+    }
+    untouched_scene_ids = {scene["scene_id"] for scene in before["scenes"]} - target_scene_ids
+    assert target_scene_ids
+    assert untouched_scene_ids
+    for scene_id in target_scene_ids:
+        assert current_by_scene[scene_id] == "Feedback revised scene from the confirmed plan."
+    for scene_id in untouched_scene_ids:
+        assert current_by_scene[scene_id] == before_by_scene[scene_id]
+
+
+def test_scene_target_feedback_is_rejected(client):
+    project_id = _prepare_script_project(client, chapters=2)
+
+    plan = client.post(
+        f"/projects/{project_id}/conversations/primary/feedback-plan",
+        json={"message": "Only revise this scene.", "target": {"type": "scene", "scene_id": "S001"}},
+    )
+
+    assert plan.status_code == 422
+    assert plan.json()["error"]["code"] == "invalid_feedback_target"
+
+
+def test_confirmed_scene_plan_feedback_is_locked(client):
+    project_id = _prepare_script_project(client)
+
+    plan = client.post(
+        f"/projects/{project_id}/conversations/primary/feedback-plan",
+        json={"message": "Change the scene plan after confirmation.", "target": {"type": "scene_plan"}},
+    )
+
+    assert plan.status_code == 409
+    assert plan.json()["error"]["code"] == "scene_plan_locked"

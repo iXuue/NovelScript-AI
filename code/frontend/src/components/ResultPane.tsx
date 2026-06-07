@@ -18,6 +18,7 @@ type Props = {
   statusText: string;
   failedStage?: string | null;
   scenePlanConfirmed: boolean;
+  selectedSceneId: string | null;
   loading: boolean;
   fallbackEvidence: Record<string, EvidenceLookupResult>;
   progress: AgentProgressType | null;
@@ -129,6 +130,7 @@ export function ResultPane({
   progress,
   scenePlan,
   scenePlanConfirmed,
+  selectedSceneId,
   scriptForUi,
   statusText,
   viewMode,
@@ -144,6 +146,14 @@ export function ResultPane({
   void onRepairScenePlan;
   void onRepairScriptScene;
   const showAgentProgress = Boolean(activeLabel) || progress?.status === "queued" || progress?.status === "running";
+  const selectedScene = selectedSceneId ? scenePlan?.scenes.find((scene) => scene.scene_id === selectedSceneId) ?? null : null;
+  const visibleScenePlanScenes = selectedScene ? [selectedScene] : scenePlan?.scenes ?? [];
+  const scenePlanTitle = selectedScene ? `${selectedScene.scene_id} ${selectedScene.title}` : "全部场景计划";
+  const scenePlanDescription = selectedScene
+    ? "当前仅显示选中的场景计划。"
+    : scenePlan?.confirmed || scenePlanConfirmed
+      ? "已确认，可继续生成剧本。"
+      : "确认前仅用于查看，不开放字段编辑。";
 
   return (
     <aside className="figma-result-panel" aria-label="成果区">
@@ -176,8 +186,8 @@ export function ResultPane({
           <section className="figma-scene-plan">
             <div className="figma-result-title-row">
               <div>
-                <h3>场景计划</h3>
-                <p>{scenePlan.confirmed || scenePlanConfirmed ? "已确认，可继续生成剧本。" : "确认前仅用于查看，不开放字段编辑。"}</p>
+                <h3>{scenePlanTitle}</h3>
+                <p>{scenePlanDescription}</p>
               </div>
               {scenePlan.confirmed || scenePlanConfirmed ? (
                 <button className="figma-primary" disabled={loading || Boolean(yaml)} type="button" onClick={onGenerateScript}>
@@ -190,7 +200,7 @@ export function ResultPane({
               )}
             </div>
             <div className="figma-scene-cards">
-              {scenePlan.scenes.map((scene) => (
+              {visibleScenePlanScenes.map((scene) => (
                 <article className="figma-scene-card" key={scene.scene_id}>
                   <div className="figma-scene-card-title">
                     <span>{scene.scene_id}</span>

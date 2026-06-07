@@ -15,15 +15,21 @@ type Props = {
   mode: UiMode;
   newProjectName: string;
   scenePlan: ScenePlan | null;
+  selectedSceneId: string | null;
   statusMessage: string | null;
   viewMode: ViewMode;
   onToggleCollapsed: () => void;
   onNewProjectNameChange: (name: string) => void;
+  onSelectScene: (sceneId: string) => void;
   onSelectView: (view: ViewMode) => void;
   onSelectProject: (projectId: string) => void;
   onNewProject: () => void;
   onLogout: () => void;
 };
+
+function DisclosureChevron({ open }: { open: boolean }) {
+  return <span className={open ? "figma-disclosure-chevron open" : "figma-disclosure-chevron"} aria-hidden="true" />;
+}
 
 function LegacyProjectSidebar({
   collapsed,
@@ -109,17 +115,21 @@ export function ProjectSidebar({
   newProjectName,
   projects,
   scenePlan,
+  selectedSceneId,
   statusMessage,
   viewMode,
   onNewProject,
   onNewProjectNameChange,
   onLogout,
   onSelectProject,
+  onSelectScene,
   onSelectView,
   onToggleCollapsed
 }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
+  const [scenePlanOpen, setScenePlanOpen] = useState(false);
+  const hasScenePlanScenes = Boolean(scenePlan?.scenes.length);
 
   function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -181,9 +191,7 @@ export function ProjectSidebar({
                       }}
                     >
                       <span>{project.name}</span>
-                      <span className={expandedProjectId === project.project_id ? "figma-project-chevron open" : "figma-project-chevron"} aria-hidden="true">
-                        ^
-                      </span>
+                      <DisclosureChevron open={expandedProjectId === project.project_id} />
                     </button>
                     {expandedProjectId === project.project_id ? (
                       <div className="figma-project-thread-preview">暂无对话</div>
@@ -234,20 +242,32 @@ export function ProjectSidebar({
           <nav className="figma-sidebar-section" aria-label="当前项目产物">
             <div className="figma-section-label">工作区</div>
             <button
-              className={viewMode === "scene-plan" ? "figma-nav-item active" : "figma-nav-item"}
+              aria-expanded={scenePlanOpen}
+              className={viewMode === "scene-plan" && !selectedSceneId ? "figma-nav-item active disclosure" : "figma-nav-item disclosure"}
               type="button"
-              onClick={() => onSelectView("scene-plan")}
+              onClick={() => {
+                onSelectView("scene-plan");
+                setScenePlanOpen((value) => !value);
+              }}
             >
-              场景计划
+              <span>场景计划</span>
+              <DisclosureChevron open={scenePlanOpen} />
             </button>
-            <div className="figma-scene-list">
-              {scenePlan?.scenes.map((scene) => (
-                <button className="figma-scene-link" key={scene.scene_id} type="button" onClick={() => onSelectView("scene-plan")}>
-                  <span>{scene.scene_id}</span>
-                  <span>{scene.title}</span>
-                </button>
-              ))}
-            </div>
+            {scenePlanOpen && hasScenePlanScenes ? (
+              <div className="figma-scene-list">
+                {scenePlan?.scenes.map((scene) => (
+                  <button
+                    className={selectedSceneId === scene.scene_id ? "figma-scene-link active" : "figma-scene-link"}
+                    key={scene.scene_id}
+                    type="button"
+                    onClick={() => onSelectScene(scene.scene_id)}
+                  >
+                    <span>{scene.scene_id}</span>
+                    <span>{scene.title}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <button
               className={viewMode === "script" ? "figma-nav-item active" : "figma-nav-item"}
               type="button"

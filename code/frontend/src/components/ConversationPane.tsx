@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 
-import type { ChapterDraft, ConversationMessage, FeedbackPlan, FeedbackTarget, StyleSource, UiMode } from "../types";
+import type { ChapterDraft, ConversationMessage, FeedbackPlan, StyleSource, UiMode } from "../types";
 import { ChapterConfirmation } from "./ChapterConfirmation";
 import { StyleSourceSelector } from "./StyleSourceSelector";
 
@@ -17,8 +17,9 @@ type Props = {
   chapters: ChapterDraft[];
   chaptersConfirmed: boolean;
   pendingFeedbackPlan?: FeedbackPlan | null;
-  feedbackTargetOptions?: Array<{ key: string; label: string; target: FeedbackTarget }>;
-  selectedFeedbackTargetKey?: string;
+  feedbackChapterOptions?: Array<{ chapterId: string; label: string }>;
+  feedbackTargetMode?: "script" | "chapters";
+  selectedFeedbackChapterIds?: string[];
   canGenerateScenePlan: boolean;
   canGenerateScript: boolean;
   loading: boolean;
@@ -30,7 +31,8 @@ type Props = {
   onGenerateScript: () => void;
   onConfirmFeedbackPlan?: () => void;
   onCancelFeedbackPlan?: () => void;
-  onFeedbackTargetChange?: (key: string) => void;
+  onFeedbackTargetModeChange?: (mode: "script" | "chapters") => void;
+  onFeedbackChapterToggle?: (chapterId: string, selected: boolean) => void;
   onSubmitMessage: (content: string) => void;
 };
 
@@ -44,15 +46,17 @@ export function ConversationPane({
   loading,
   messages,
   pendingFeedbackPlan,
-  feedbackTargetOptions = [],
-  selectedFeedbackTargetKey = "",
+  feedbackChapterOptions = [],
+  feedbackTargetMode = "script",
+  selectedFeedbackChapterIds = [],
   selectedStyle,
   styleLocked,
   uploadedNovelName,
   onConfirmChapters,
   onConfirmFeedbackPlan = () => undefined,
   onCancelFeedbackPlan = () => undefined,
-  onFeedbackTargetChange = () => undefined,
+  onFeedbackTargetModeChange = () => undefined,
+  onFeedbackChapterToggle = () => undefined,
   onGenerateScenePlan,
   onGenerateScript,
   onNovelSelected,
@@ -178,17 +182,36 @@ export function ConversationPane({
                 onReferenceFileSelected={onStyleReferenceSelected}
               />
               {uploadedNovelName ? <span className="figma-uploaded-name">{uploadedNovelName}</span> : null}
-              {feedbackTargetOptions.length > 1 ? (
-                <label className="figma-feedback-target">
-                  <span>修改目标</span>
-                  <select value={selectedFeedbackTargetKey} disabled={loading} onChange={(event) => onFeedbackTargetChange(event.target.value)}>
-                    {feedbackTargetOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              {feedbackChapterOptions.length > 0 ? (
+                <fieldset className="figma-feedback-target" aria-label="修改目标">
+                  <legend>修改目标</legend>
+                  <label className="figma-feedback-target-choice">
+                    <input
+                      checked={feedbackTargetMode === "script"}
+                      disabled={loading}
+                      name="feedback-target"
+                      type="radio"
+                      onChange={() => onFeedbackTargetModeChange("script")}
+                    />
+                    <span>全部章节</span>
+                  </label>
+                  <div className="figma-feedback-chapter-group">
+                    <span>指定章节（可多选）</span>
+                    <div className="figma-feedback-chapter-list">
+                      {feedbackChapterOptions.map((option) => (
+                        <label className="figma-feedback-target-choice" key={option.chapterId}>
+                          <input
+                            checked={feedbackTargetMode === "chapters" && selectedFeedbackChapterIds.includes(option.chapterId)}
+                            disabled={loading}
+                            type="checkbox"
+                            onChange={(event) => onFeedbackChapterToggle(option.chapterId, event.target.checked)}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </fieldset>
               ) : null}
             </div>
             <div className="figma-composer-main-actions">

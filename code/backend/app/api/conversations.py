@@ -69,10 +69,12 @@ def modify_script_endpoint(
         raise api_error(404, "project_not_found", "Project not found")
     except ValueError as exc:
         raise api_error(422, "invalid_feedback_target", "Invalid feedback target", {"reason": str(exc)})
+    except PermissionError as exc:
+        if str(exc) == "scene_plan_confirmed":
+            raise api_error(409, "scene_plan_locked", "Confirmed Scene Plan cannot be modified from feedback")
+        raise api_error(409, "feedback_plan_not_allowed", "Feedback plan cannot be created")
     except RuntimeError as exc:
         raise api_error(502, "feedback_plan_failed", "Feedback plan generation failed", {"reason": str(exc)})
-    except PermissionError:
-        raise api_error(409, "scene_plan_change_required", "This change requires Scene Plan regeneration")
 
 
 @router.post("/projects/{project_id}/conversations/primary/feedback-plan")
@@ -90,6 +92,10 @@ def create_feedback_plan_endpoint(
         raise api_error(404, "project_not_found", "Project not found")
     except ValueError as exc:
         raise api_error(422, "invalid_feedback_target", "Invalid feedback target", {"reason": str(exc)})
+    except PermissionError as exc:
+        if str(exc) == "scene_plan_confirmed":
+            raise api_error(409, "scene_plan_locked", "Confirmed Scene Plan cannot be modified from feedback")
+        raise api_error(409, "feedback_plan_not_allowed", "Feedback plan cannot be created")
     except RuntimeError as exc:
         raise api_error(502, "feedback_plan_failed", "Feedback plan generation failed", {"reason": str(exc)})
 

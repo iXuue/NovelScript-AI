@@ -163,8 +163,7 @@ export type ConversationMessage = {
 export type FeedbackTarget =
   | { type: "scene_plan" }
   | { type: "script" }
-  | { type: "chapter"; chapter_id: string }
-  | { type: "scene"; scene_id: string };
+  | { type: "chapters"; chapter_ids: string[] };
 
 export type FeedbackSourceRequest = {
   paragraph_ids: string[];
@@ -174,7 +173,7 @@ export type FeedbackSourceRequest = {
 };
 
 export type FeedbackModificationPlan = {
-  intent: "regenerate_scene_plan" | "regenerate_script" | "modify_chapter" | "modify_scene";
+  intent: "regenerate_scene_plan" | "regenerate_script" | "modify_chapter";
   affected_scope: {
     chapter_ids: string[];
     scene_ids: string[];

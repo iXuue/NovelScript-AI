@@ -1009,11 +1009,23 @@ select:disabled {
 }
 
 .figma-nav-item.active,
+.figma-scene-link.active,
 .figma-style-pill.active {
   background: var(--studio-primary-soft);
   border-color: #efaa98;
   color: #512f28;
   font-weight: 760;
+}
+
+.figma-nav-item.disclosure {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.figma-nav-item.disclosure > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .figma-sidebar-section,
@@ -1348,6 +1360,62 @@ select:disabled {
   display: flex;
   flex: 0 0 auto;
   gap: 8px;
+}
+
+.figma-feedback-target {
+  align-items: flex-start;
+  background: rgba(255, 230, 221, 0.45);
+  border: 1px solid rgba(239, 170, 152, 0.72);
+  border-radius: var(--studio-radius);
+  display: flex;
+  flex: 1 1 300px;
+  gap: 10px;
+  margin: 0;
+  max-width: min(100%, 560px);
+  min-height: 48px;
+  min-width: 240px;
+  padding: 7px 10px;
+}
+
+.figma-feedback-target legend {
+  color: var(--studio-muted);
+  font-size: 12px;
+  font-weight: 720;
+  padding: 0 4px;
+}
+
+.figma-feedback-target-choice {
+  align-items: center;
+  color: var(--studio-ink);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 690;
+  gap: 5px;
+  line-height: 1.3;
+  min-height: 22px;
+}
+
+.figma-feedback-target-choice input {
+  margin: 0;
+}
+
+.figma-feedback-chapter-group {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 5px;
+  min-width: 0;
+}
+
+.figma-feedback-chapter-group > span {
+  color: var(--studio-muted);
+  font-size: 12px;
+  font-weight: 690;
+}
+
+.figma-feedback-chapter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
 }
 
 .figma-next-step-panel {
@@ -2096,6 +2164,11 @@ select:disabled {
     padding: 0 10px 10px;
   }
 
+  .figma-feedback-target {
+    max-width: 100%;
+    width: 100%;
+  }
+
   .figma-composer .figma-composer-field textarea {
     height: calc(100% - 148px);
     padding-bottom: 12px;
@@ -2343,17 +2416,39 @@ select:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.figma-project-chevron {
-  color: rgba(107, 63, 54, 0.62);
-  display: inline-block;
-  font-size: 13px;
-  line-height: 1;
-  transform: rotate(0deg);
-  transition: transform 160ms ease;
+.figma-disclosure-chevron {
+  align-items: center;
+  background: rgba(255, 250, 247, 0.76);
+  border: 1px solid rgba(233, 130, 109, 0.28);
+  border-radius: 999px;
+  color: rgba(107, 63, 54, 0.72);
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  position: relative;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  width: 22px;
 }
 
-.figma-project-chevron.open {
-  transform: rotate(180deg);
+.figma-disclosure-chevron::before {
+  border-bottom: 1.6px solid currentColor;
+  border-right: 1.6px solid currentColor;
+  content: "";
+  height: 6px;
+  transform: rotate(-45deg);
+  transition: transform 160ms ease;
+  width: 6px;
+}
+
+.figma-disclosure-chevron.open::before {
+  transform: rotate(45deg);
+}
+
+.figma-nav-item:hover .figma-disclosure-chevron,
+.figma-nav-item.active .figma-disclosure-chevron {
+  background: rgba(255, 255, 255, 0.74);
+  border-color: rgba(233, 130, 109, 0.48);
+  color: #6b3f36;
 }
 
 .figma-project-thread-preview {

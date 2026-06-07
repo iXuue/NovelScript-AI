@@ -101,6 +101,8 @@ def create_feedback_plan(project_id: str, message: str, target: dict, db, llm_pr
         raise RuntimeError("LLM provider is required to create a feedback plan")
 
     normalized_target = normalize_target(target)
+    if normalized_target["type"] == "scene_plan" and _current_scene_plan_is_confirmed(db, project_id):
+        raise PermissionError("scene_plan_confirmed")
     stage = stage_for_target(normalized_target)
     saved_message = send_message(project_id, message, db)
     artifact_fingerprint = current_artifact_fingerprint(db, project_id, stage)
@@ -222,7 +224,7 @@ def confirm_feedback_plan(project_id: str, feedback_plan_id: str, db, llm_provid
 
 
 def modify_script(project_id: str, message: str, target: dict, db=None) -> dict:
-    if target.get("type") in {"scene", "chapter", "script"}:
+    if target.get("type") in {"chapters", "script"}:
         send_message(project_id, message, db)
         run = create_project_run(project_id, "conversation_edit", "conversation_edit", ["conversation_edit", "validation"], db)
         return {"run_id": run["run_id"], "status": "running", "stage": "conversation_edit"}
@@ -234,7 +236,7 @@ def _feedback_plan_prompt(user_feedback: str, target: dict[str, Any], context: d
         "You are the Feedback Planning Worker for a novel-to-screenplay adaptation system.\n"
         "Create a concrete modification plan only. Do not rewrite the Scene Plan or screenplay yet.\n"
         "Return only one JSON object. No Markdown. No explanation.\n"
-        "JSON schema: {\"intent\":\"regenerate_scene_plan|regenerate_script|modify_chapter|modify_scene\","
+        "JSON schema: {\"intent\":\"regenerate_scene_plan|regenerate_script|modify_chapter\","
         "\"affected_scope\":{\"chapter_ids\":[],\"scene_ids\":[]},\"modification_plan\":[\"...\"],"
         "\"needs_source_text\":true,\"source_requests\":[{\"paragraph_ids\":[],\"scene_ids\":[],\"chapter_ids\":[],\"reason\":\"...\"}],"
         "\"user_confirmation_required\":true}\n"
@@ -243,8 +245,9 @@ def _feedback_plan_prompt(user_feedback: str, target: dict[str, Any], context: d
         "- Do not ask for full source text unless it is needed to avoid factual drift.\n"
         "- If target.type is scene_plan, use intent regenerate_scene_plan.\n"
         "- If target.type is script, use intent regenerate_script.\n"
-        "- If target.type is chapter, use intent modify_chapter and include the target chapter_id.\n"
-        "- If target.type is scene, use intent modify_scene and include the target scene_id.\n"
+        "- If target.type is chapters, use intent modify_chapter and include all target chapter_ids.\n"
+        "- Script-stage feedback can only modify screenplay text within the selected chapter range.\n"
+        "- Once a Scene Plan is confirmed, do not propose adding, deleting, reordering, or relinking Scene Plan scenes.\n"
         "- Keep the plan faithful to the provided adaptation context.\n\n"
         f"user_feedback:\n{user_feedback}\n\n"
         f"target:\n{json.dumps(target, ensure_ascii=False)}\n\n"
@@ -266,6 +269,16 @@ def _feedback_plan_context(db: Session, project_id: str, target: dict[str, Any])
         "full_source_text_included": False,
     }
     return context
+
+
+def _current_scene_plan_is_confirmed(db: Session, project_id: str) -> bool:
+    scene_plan = (
+        db.query(ScenePlan)
+        .filter(ScenePlan.project_id == project_id, ScenePlan.is_current.is_(True))
+        .order_by(ScenePlan.version_number.desc())
+        .first()
+    )
+    return bool(scene_plan and scene_plan.confirmed)
 
 
 def _current_scene_plan_summary(db: Session, project_id: str) -> dict[str, Any] | None:
@@ -338,11 +351,9 @@ def _current_script_summary(db: Session, project_id: str, target: dict[str, Any]
 
 
 def _target_scene_ids_for_summary(version: ScriptVersion, target: dict[str, Any]) -> set[str] | None:
-    if target["type"] == "scene":
-        return {target["scene_id"]}
-    if target["type"] == "chapter":
-        chapter_id = target["chapter_id"]
-        return {scene.scene_id for scene in version.scenes if chapter_id in (scene.source_chapter_ids or [])}
+    if target["type"] == "chapters":
+        chapter_ids = set(target["chapter_ids"])
+        return {scene.scene_id for scene in version.scenes if chapter_ids.intersection(scene.source_chapter_ids or [])}
     return None
 
 
@@ -360,19 +371,18 @@ def _validate_feedback_plan_payload(payload: dict[str, Any], target: dict[str, A
     default_intent = {
         "scene_plan": "regenerate_scene_plan",
         "script": "regenerate_script",
-        "chapter": "modify_chapter",
-        "scene": "modify_scene",
+        "chapters": "modify_chapter",
     }[target["type"]]
     intent = payload.get("intent") if isinstance(payload.get("intent"), str) else default_intent
-    if intent not in {"regenerate_scene_plan", "regenerate_script", "modify_chapter", "modify_scene"}:
+    if intent not in {"regenerate_scene_plan", "regenerate_script", "modify_chapter"}:
         intent = default_intent
     affected_scope = payload.get("affected_scope") if isinstance(payload.get("affected_scope"), dict) else {}
     chapter_ids = _string_list(affected_scope.get("chapter_ids"))
     scene_ids = _string_list(affected_scope.get("scene_ids"))
-    if target["type"] == "scene" and target["scene_id"] not in scene_ids:
-        scene_ids.append(target["scene_id"])
-    if target["type"] == "chapter" and target["chapter_id"] not in chapter_ids:
-        chapter_ids.append(target["chapter_id"])
+    if target["type"] == "chapters":
+        for chapter_id in target["chapter_ids"]:
+            if chapter_id not in chapter_ids:
+                chapter_ids.append(chapter_id)
     plan_items = _string_list(payload.get("modification_plan"))
     if not plan_items:
         plan_items = ["Revise the target artifact according to the user's feedback while preserving source facts."]

@@ -122,30 +122,31 @@ class FakeAnalysisLLMProvider(LLMProvider):
                 }
             )
         elif request.task_type == "feedback_plan":
-            target_match = re.search(r'"type":\s*"(scene_plan|script|chapter|scene)"', request.prompt)
-            target_type = target_match.group(1) if target_match else "script"
+            target_payload = {}
+            target_match = re.search(r"target:\n({.*?})\n\ncontext_without_full_source_text:", request.prompt, re.S)
+            if target_match:
+                target_payload = json.loads(target_match.group(1))
+            target_type = target_payload.get("type") or "script"
             intent_by_target = {
                 "scene_plan": "regenerate_scene_plan",
                 "script": "regenerate_script",
-                "chapter": "modify_chapter",
-                "scene": "modify_scene",
+                "chapters": "modify_chapter",
             }
-            scene_match = re.search(r'"scene_id":\s*"(S\d+)"', request.prompt)
-            chapter_match = re.search(r'"chapter_id":\s*"(CH\d+)"', request.prompt)
+            chapter_ids = target_payload.get("chapter_ids") if isinstance(target_payload.get("chapter_ids"), list) else []
             text = json_dumps(
                 {
                     "intent": intent_by_target[target_type],
                     "affected_scope": {
-                        "chapter_ids": [chapter_match.group(1)] if chapter_match else [],
-                        "scene_ids": [scene_match.group(1)] if scene_match else [],
+                        "chapter_ids": chapter_ids,
+                        "scene_ids": [],
                     },
                     "modification_plan": ["Apply the user's feedback while preserving source facts."],
                     "needs_source_text": True,
                     "source_requests": [
                         {
                             "paragraph_ids": ["CH001_P001"],
-                            "scene_ids": [scene_match.group(1)] if scene_match else [],
-                            "chapter_ids": [chapter_match.group(1)] if chapter_match else [],
+                            "scene_ids": [],
+                            "chapter_ids": chapter_ids,
                             "reason": "Use the source paragraph to keep factual continuity.",
                         }
                     ],
