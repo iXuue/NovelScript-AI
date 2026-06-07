@@ -4,6 +4,8 @@ import type {
   AuthUser,
   ChapterDraft,
   ConversationMessage,
+  FeedbackPlan,
+  FeedbackTarget,
   EvidenceLookupResult,
   ExportFormat,
   ExportResult,
@@ -224,10 +226,26 @@ export async function modifyScript(
   projectId: string,
   message: string,
   target: { type: "scene" | "chapter" | "script"; scene_id?: string; chapter_id?: string }
-): Promise<{ run_id: string; status: RunStatus; stage: string }> {
+): Promise<FeedbackPlan> {
   return requestJson(`/projects/${projectId}/conversations/primary/modify-script`, {
     method: "POST",
     body: JSON.stringify({ message, target })
+  });
+}
+
+export async function createFeedbackPlan(projectId: string, message: string, target: FeedbackTarget): Promise<FeedbackPlan> {
+  return requestJson(`/projects/${projectId}/conversations/primary/feedback-plan`, {
+    method: "POST",
+    body: JSON.stringify({ message, target })
+  });
+}
+
+export async function confirmFeedbackPlan(
+  projectId: string,
+  feedbackPlanId: string
+): Promise<{ run_id: string; status: RunStatus; stage: string; scene_plan_id?: string; script_version_id?: string }> {
+  return requestJson(`/projects/${projectId}/conversations/primary/feedback-plan/${feedbackPlanId}/confirm`, {
+    method: "POST"
   });
 }
 

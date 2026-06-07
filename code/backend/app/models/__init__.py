@@ -2,6 +2,7 @@ from app.models.analysis import ChapterSummary, EvidenceItem
 from app.models.chapter import Chapter, Paragraph
 from app.models.checkpoint import Checkpoint
 from app.models.export import ExportJob
+from app.models.feedback_plan_cache import FeedbackPlanCacheEntry
 from app.models.project import Project
 from app.models.repair import RepairAttempt
 from app.models.runtime import AgentRun, AgentRunStep, ConversationMessageRecord, DeveloperLog, SourceFileRecord
@@ -22,6 +23,7 @@ __all__ = [
     "DeveloperLog",
     "EvidenceItem",
     "ExportJob",
+    "FeedbackPlanCacheEntry",
     "Paragraph",
     "Project",
     "RepairAttempt",

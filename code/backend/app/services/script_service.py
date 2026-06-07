@@ -28,6 +28,7 @@ def generate_script_from_confirmed_scene_plan(
     project_id: str,
     llm_provider: LLMProvider | None,
     run_id: str | None = None,
+    feedback_plan: dict | None = None,
 ) -> dict:
     scene_plan = _confirmed_scene_plan(db, project_id)
     if scene_plan is None:
@@ -46,7 +47,7 @@ def generate_script_from_confirmed_scene_plan(
         response = generate_with_context_log(
             llm_provider,
             task_type="script_generation",
-            prompt=_script_scene_prompt(scene, relevant_paragraphs, style_profile),
+            prompt=_script_scene_prompt(scene, relevant_paragraphs, style_profile, feedback_plan=feedback_plan),
             response_format="json",
             db=db,
             project_id=project_id,
@@ -196,6 +197,101 @@ def repair_script_scene(db: Session, project_id: str, scene_id: str, llm_provide
     }
 
 
+def modify_script_from_feedback_plan(
+    db: Session,
+    project_id: str,
+    llm_provider: LLMProvider | None,
+    feedback_plan: dict,
+    run_id: str | None = None,
+) -> dict:
+    current_version = _current_script_version(db, project_id)
+    if current_version is None:
+        raise KeyError("script_missing")
+    scene_plan = _confirmed_scene_plan(db, project_id)
+    if scene_plan is None:
+        raise PermissionError("scene_plan_not_confirmed")
+    if llm_provider is None:
+        raise RuntimeError("LLM provider is required to modify script")
+
+    target_scene_ids = _target_scene_ids_from_feedback(scene_plan, feedback_plan)
+    if not target_scene_ids:
+        raise KeyError("script_target_scene_missing")
+
+    project = db.get(Project, project_id)
+    paragraphs_by_id = _paragraphs_by_id(db, project_id)
+    style_profile = _style_profile(db, project_id)
+    script_scenes_by_id = {scene.scene_id: scene for scene in current_version.scenes}
+    blocks_by_scene: dict[str, list[ScriptContentBlock]] = {}
+    for block in sorted(current_version.content_blocks, key=lambda item: (item.scene_id, item.order)):
+        blocks_by_scene.setdefault(block.scene_id, []).append(block)
+
+    generated_scenes: list[dict] = []
+    model_names: list[str] = []
+    for scene_plan_scene in sorted(scene_plan.scenes, key=lambda scene: scene.order):
+        current_script_scene = script_scenes_by_id.get(scene_plan_scene.scene_id)
+        current_blocks = blocks_by_scene.get(scene_plan_scene.scene_id, [])
+        if scene_plan_scene.scene_id not in target_scene_ids:
+            if current_script_scene is None:
+                raise KeyError("script_scene_missing")
+            generated_scenes.append(_script_scene_payload_from_existing(current_script_scene, current_blocks))
+            continue
+        relevant_paragraphs = _source_paragraphs_for_scene(scene_plan_scene, paragraphs_by_id)
+        response = generate_with_context_log(
+            llm_provider,
+            task_type="script_generation",
+            prompt=_script_scene_prompt(
+                scene_plan_scene,
+                relevant_paragraphs,
+                style_profile,
+                feedback_plan=feedback_plan,
+                current_script_scene=current_script_scene,
+                current_blocks=current_blocks,
+            ),
+            response_format="json",
+            db=db,
+            project_id=project_id,
+            run_id=run_id,
+            step_type="script_generation",
+            chunk_range={"scene_id": scene_plan_scene.scene_id, "feedback_target": feedback_plan.get("target")},
+            source_item_count=len(relevant_paragraphs) + len(current_blocks),
+            included_item_count=len(relevant_paragraphs) + len(current_blocks),
+        )
+        model_names.append(response.model_name)
+        generated_scenes.append(
+            _validate_script_scene_payload(
+                _load_json_object(response.text),
+                scene=scene_plan_scene,
+                paragraph_ids=set(paragraphs_by_id),
+            )
+        )
+
+    version = _replace_script_version(
+        db,
+        project_id=project_id,
+        title=project.name if project is not None else project_id,
+        scenes=generated_scenes,
+        source=",".join(sorted(set(model_names))) if model_names else current_version.source,
+    )
+    validations = _validate_and_store_script_scenes(db, version, scene_plan.scenes, paragraphs_by_id)
+    if any(not validation.passed for validation in validations):
+        version.status = ArtifactStatus.failed
+        version.updated_at = now_utc()
+        db.commit()
+        _mirror_script_to_store(project_id, version)
+        update_project_stage(project_id, ProjectStage.script_generating)
+        update_project_stage_in_db(db, project_id, ProjectStage.script_generating)
+        raise PermissionError("script_scene_validation_failed")
+    _mirror_script_to_store(project_id, version)
+    update_project_stage(project_id, ProjectStage.script_ready)
+    update_project_stage_in_db(db, project_id, ProjectStage.script_ready)
+    return {
+        "script_version_id": version.script_version_id,
+        "status": "running",
+        "stage": ProjectStage.script_generating,
+        "target_scene_ids": sorted(target_scene_ids),
+    }
+
+
 def _replace_script_version(db: Session, project_id: str, title: str, scenes: list[dict], source: str) -> ScriptVersion:
     previous_current = (
         db.query(ScriptVersion)
@@ -333,11 +429,75 @@ def _next_content_block_number(used_block_ids: set[str]) -> int:
     return max(numbers, default=0) + 1
 
 
+def _target_scene_ids_from_feedback(scene_plan: ScenePlan, feedback_plan: dict) -> set[str]:
+    target = feedback_plan.get("target") or {}
+    target_type = target.get("type")
+    if target_type == "scene":
+        return {target["scene_id"]} if target.get("scene_id") else set()
+    if target_type == "chapter":
+        chapter_id = target.get("chapter_id")
+        if not chapter_id:
+            return set()
+        return {
+            scene.scene_id
+            for scene in scene_plan.scenes
+            if chapter_id in (scene.source_chapter_ids or [])
+        }
+    affected_scope = feedback_plan.get("modification_plan", {}).get("affected_scope") if isinstance(feedback_plan.get("modification_plan"), dict) else {}
+    scene_ids = affected_scope.get("scene_ids") if isinstance(affected_scope, dict) else []
+    return {str(scene_id) for scene_id in scene_ids or [] if str(scene_id).strip()}
+
+
+def _script_scene_payload_from_existing(script_scene: ScriptScene, content_blocks: list[ScriptContentBlock]) -> dict:
+    return {
+        "scene_id": script_scene.scene_id,
+        "title": script_scene.title,
+        "source_chapter_ids": script_scene.source_chapter_ids,
+        "scene_info": script_scene.scene_info,
+        "characters": script_scene.characters,
+        "scene_purpose": script_scene.scene_purpose,
+        "core_conflict": script_scene.core_conflict,
+        "content_blocks": [
+            {
+                "content_block_id": block.content_block_id,
+                "type": block.block_type,
+                "text": block.text,
+                "speaker": block.speaker,
+                "source_evidence_ids": block.source_evidence_ids,
+                "source_paragraph_ids": block.source_paragraph_ids,
+            }
+            for block in content_blocks
+        ],
+    }
+
+
 def _script_scene_prompt(
     scene: ScenePlanScene,
     paragraphs: list[Paragraph],
     style_profile: StyleProfile | None,
+    feedback_plan: dict | None = None,
+    current_script_scene: ScriptScene | None = None,
+    current_blocks: list[ScriptContentBlock] | None = None,
 ) -> str:
+    feedback_text = ""
+    if feedback_plan is not None:
+        feedback_context = {
+            "target": feedback_plan.get("target"),
+            "user_feedback": feedback_plan.get("user_feedback"),
+            "confirmed_modification_plan": feedback_plan.get("modification_plan"),
+            "source_requests": feedback_plan.get("source_requests"),
+        }
+        feedback_text = (
+            "\n\nconfirmed_feedback_plan:\n"
+            f"{json.dumps(feedback_context, ensure_ascii=False)}"
+        )
+        if current_script_scene is not None:
+            feedback_text += (
+                "\n\ncurrent_script_scene:\n"
+                f"{_script_scene_block(current_script_scene)}\n\n"
+                "current_content_blocks:\n"
+                f"{_script_block(current_blocks or [])}"
+            )
     return (
         "You are the Script Generation Worker. Generate screenplay content for exactly one confirmed scene.\n"
         "Return only one JSON object. No Markdown. No explanation.\n"
@@ -358,10 +518,12 @@ def _script_scene_prompt(
         "- Every content block must cite source_paragraph_ids from the source_paragraphs list.\n"
         "- source_paragraph_ids must never be empty. If one block condenses multiple source paragraphs, cite every relevant paragraph ID from source_paragraphs.\n"
         "- source_evidence_ids is a legacy compatibility field; always return an empty array for it.\n"
+        "- If a confirmed_feedback_plan is provided, revise the target scene according to it while preserving source facts.\n"
         "- Do not include internal notes or analysis in text.\n\n"
         f"scene_plan_scene:\n{_scene_block(scene)}\n\n"
         f"source_paragraphs:\n{_paragraph_block(paragraphs)}\n\n"
         f"style_profile:\n{truncate_text(style_profile.profile_text, 3000) if style_profile is not None else 'Use a neutral, concise screenplay style.'}"
+        f"{feedback_text}"
     )
 
 

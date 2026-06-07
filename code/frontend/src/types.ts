@@ -160,6 +160,49 @@ export type ConversationMessage = {
   created_at: string;
 };
 
+export type FeedbackTarget =
+  | { type: "scene_plan" }
+  | { type: "script" }
+  | { type: "chapter"; chapter_id: string }
+  | { type: "scene"; scene_id: string };
+
+export type FeedbackSourceRequest = {
+  paragraph_ids: string[];
+  scene_ids: string[];
+  chapter_ids: string[];
+  reason: string;
+};
+
+export type FeedbackModificationPlan = {
+  intent: "regenerate_scene_plan" | "regenerate_script" | "modify_chapter" | "modify_scene";
+  affected_scope: {
+    chapter_ids: string[];
+    scene_ids: string[];
+  };
+  modification_plan: string[];
+  needs_source_text: boolean;
+  source_requests: FeedbackSourceRequest[];
+  user_confirmation_required: boolean;
+};
+
+export type FeedbackPlan = {
+  feedback_plan_id: string;
+  message_id?: string | null;
+  run_id?: string | null;
+  message?: ConversationMessage;
+  stage: "scene_plan" | "script";
+  target: FeedbackTarget;
+  target_type: FeedbackTarget["type"];
+  scope_id: string;
+  artifact_fingerprint: string;
+  user_feedback: string;
+  modification_plan: FeedbackModificationPlan;
+  source_requests: FeedbackSourceRequest[];
+  cache_hit: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ExportFormat = "yaml" | "markdown" | "docx" | "pdf" | "txt" | "clean_json";
 
 export type ExportResult = {

@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 
-import type { ChapterDraft, ConversationMessage, StyleSource, UiMode } from "../types";
+import type { ChapterDraft, ConversationMessage, FeedbackPlan, FeedbackTarget, StyleSource, UiMode } from "../types";
 import { ChapterConfirmation } from "./ChapterConfirmation";
 import { StyleSourceSelector } from "./StyleSourceSelector";
 
@@ -16,6 +16,9 @@ type Props = {
   hasNovelUpload: boolean;
   chapters: ChapterDraft[];
   chaptersConfirmed: boolean;
+  pendingFeedbackPlan?: FeedbackPlan | null;
+  feedbackTargetOptions?: Array<{ key: string; label: string; target: FeedbackTarget }>;
+  selectedFeedbackTargetKey?: string;
   canGenerateScenePlan: boolean;
   canGenerateScript: boolean;
   loading: boolean;
@@ -25,6 +28,9 @@ type Props = {
   onConfirmChapters: () => void;
   onGenerateScenePlan: () => void;
   onGenerateScript: () => void;
+  onConfirmFeedbackPlan?: () => void;
+  onCancelFeedbackPlan?: () => void;
+  onFeedbackTargetChange?: (key: string) => void;
   onSubmitMessage: (content: string) => void;
 };
 
@@ -37,10 +43,16 @@ export function ConversationPane({
   hasNovelUpload,
   loading,
   messages,
+  pendingFeedbackPlan,
+  feedbackTargetOptions = [],
+  selectedFeedbackTargetKey = "",
   selectedStyle,
   styleLocked,
   uploadedNovelName,
   onConfirmChapters,
+  onConfirmFeedbackPlan = () => undefined,
+  onCancelFeedbackPlan = () => undefined,
+  onFeedbackTargetChange = () => undefined,
   onGenerateScenePlan,
   onGenerateScript,
   onNovelSelected,
@@ -117,6 +129,28 @@ export function ConversationPane({
             </article>
           ))}
         </section>
+
+        {pendingFeedbackPlan ? (
+          <section className="figma-next-step-panel" aria-label="修改计划">
+            <div>
+              <strong>{pendingFeedbackPlan.cache_hit ? "已命中缓存修改计划" : "修改计划待确认"}</strong>
+              <ul>
+                {pendingFeedbackPlan.modification_plan.modification_plan.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              {pendingFeedbackPlan.modification_plan.needs_source_text ? <p>执行时会按计划精确读取必要原文。</p> : null}
+            </div>
+            <div className="figma-composer-main-actions">
+              <button className="figma-primary" disabled={loading} type="button" onClick={onConfirmFeedbackPlan}>
+                确认执行
+              </button>
+              <button className="figma-secondary" disabled={loading} type="button" onClick={onCancelFeedbackPlan}>
+                取消
+              </button>
+            </div>
+          </section>
+        ) : null}
       </div>
 
       <form className="figma-composer" onSubmit={handleSubmit}>
@@ -144,6 +178,18 @@ export function ConversationPane({
                 onReferenceFileSelected={onStyleReferenceSelected}
               />
               {uploadedNovelName ? <span className="figma-uploaded-name">{uploadedNovelName}</span> : null}
+              {feedbackTargetOptions.length > 1 ? (
+                <label className="figma-feedback-target">
+                  <span>修改目标</span>
+                  <select value={selectedFeedbackTargetKey} disabled={loading} onChange={(event) => onFeedbackTargetChange(event.target.value)}>
+                    {feedbackTargetOptions.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
             </div>
             <div className="figma-composer-main-actions">
               {showGenerateAction ? (
