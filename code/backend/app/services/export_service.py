@@ -128,6 +128,9 @@ def _format_content_block(block: dict) -> str | None:
     block_type = _string_value(block.get("type") or block.get("block_type"))
     if block_type == "dialogue":
         speaker = _string_value(block.get("speaker")) or "未指定角色"
+        parenthetical = _string_value(block.get("parenthetical"))
+        if parenthetical:
+            return f"{speaker}（{parenthetical}）：{text}"
         return f"{speaker}：{text}"
 
     label = _block_type_label(block_type)

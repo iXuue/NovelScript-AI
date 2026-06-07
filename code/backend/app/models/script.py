@@ -71,6 +71,7 @@ class ScriptContentBlock(Base):
     speaker: Mapped[str | None] = mapped_column(String(200), nullable=True)
     source_evidence_ids: Mapped[list] = mapped_column(json_list_type, nullable=False, default=list)
     source_paragraph_ids: Mapped[list] = mapped_column(json_list_type, nullable=False, default=list)
+    parenthetical: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

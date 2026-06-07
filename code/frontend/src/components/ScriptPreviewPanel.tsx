@@ -47,6 +47,7 @@ function blockYaml(block: ScriptContentBlock): string {
     `      标识: ${block.content_block_id}`,
     `      标签: ${yamlScalar(block.display_label)}`,
     `      说话人: ${yamlScalar(block.speaker)}`,
+    `      表演指示: ${yamlScalar(block.parenthetical)}`,
     `      文本: ${yamlScalar(block.text)}`
   ];
   return lines.join("\n");

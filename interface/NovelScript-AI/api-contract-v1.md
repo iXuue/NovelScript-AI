@@ -174,6 +174,7 @@ export type ScriptContentBlock = {
   display_label: string;
   text?: string;
   speaker?: string | null;
+  parenthetical?: string | null;
   source_evidence_ids: string[];
 };
 

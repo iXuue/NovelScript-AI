@@ -70,6 +70,7 @@ function ScriptBlockView({ block }: { block: ScriptContentBlock }) {
     return (
       <div className="script-text-block script-text-dialogue">
         <strong>{block.speaker || "未指定角色"}</strong>
+        {block.parenthetical ? <em className="script-text-parenthetical">({block.parenthetical})</em> : null}
         <p>{text}</p>
       </div>
     );

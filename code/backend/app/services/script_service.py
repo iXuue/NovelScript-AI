@@ -360,6 +360,7 @@ def _replace_script_version(db: Session, project_id: str, title: str, scenes: li
                     block_type=block["type"],
                     text=block["text"],
                     speaker=block["speaker"],
+                    parenthetical=block.get("parenthetical"),
                     source_evidence_ids=block["source_evidence_ids"],
                     source_paragraph_ids=block["source_paragraph_ids"],
                     created_at=timestamp,
@@ -415,6 +416,7 @@ def _replace_script_scene_content(db: Session, version: ScriptVersion, script_sc
                 block_type=block["type"],
                 text=block["text"],
                 speaker=block["speaker"],
+                parenthetical=block.get("parenthetical"),
                 source_evidence_ids=block["source_evidence_ids"],
                 source_paragraph_ids=block["source_paragraph_ids"],
                 created_at=timestamp,
@@ -508,7 +510,7 @@ def _script_scene_prompt(
         "\"characters\":[\"...\"],\"scene_purpose\":\"...\",\"core_conflict\":\"...\","
         "\"content_blocks\":["
         "{\"content_block_id\":\"CB001\",\"type\":\"action/dialogue/narration/transition/note\","
-        "\"text\":\"...\",\"speaker\":null,\"source_paragraph_ids\":[\"CH001_P001\"],"
+        "\"text\":\"...\",\"speaker\":null,\"parenthetical\":null,\"source_paragraph_ids\":[\"CH001_P001\"],"
         "\"source_evidence_ids\":[]}]}\n"
         "Rules:\n"
         "- scene_id must match the input scene.\n"
@@ -517,6 +519,7 @@ def _script_scene_prompt(
         "- Preserve required plot, dialogue, visual elements, and foreshadowing from the scene plan.\n"
         "- Block types are only action, dialogue, narration, transition, and note.\n"
         "- For dialogue blocks, speaker must be the character name and cannot be empty. For non-dialogue blocks, speaker must be null.\n"
+        "- For dialogue blocks, parenthetical is an optional performance direction in brackets (e.g. 低声, 颤抖, 冷笑). Set to null for non-dialogue blocks or when no specific direction is needed.\n"
         "- If a dialogue speaker is ambiguous, use a concise descriptive speaker such as 围观者, 人群, 旁白, or the closest source character; never omit speaker for dialogue.\n"
         "- Every content block must cite source_paragraph_ids from the source_paragraphs list.\n"
         "- source_paragraph_ids must never be empty. If one block condenses multiple source paragraphs, cite every relevant paragraph ID from source_paragraphs.\n"
@@ -675,7 +678,8 @@ def _script_scene_repair_prompt(
         "- Preserve valid content blocks when possible.\n"
         "- Fix only issues identified by validation unless required for consistency.\n"
         "- Keep block types limited to action, dialogue, narration, transition, note.\n"
-        "- Dialogue blocks must include speaker.\n\n"
+        "- Dialogue blocks must include speaker.\n"
+        "- Dialogue blocks may include an optional parenthetical performance direction.\n\n"
         f"validation_issues:\n{json.dumps(validation.issues, ensure_ascii=False)}\n\n"
         f"validation_suggestions:\n{json.dumps(validation.suggestions, ensure_ascii=False)}\n\n"
         f"scene_plan_scene:\n{_scene_block(scene_plan_scene)}\n\n"
@@ -733,6 +737,7 @@ def _script_block(content_blocks: list[ScriptContentBlock]) -> str:
                 "type": block.block_type,
                 "text": block.text,
                 "speaker": block.speaker,
+                "parenthetical": block.parenthetical,
                 "source_evidence_ids": block.source_evidence_ids,
                 "source_paragraph_ids": block.source_paragraph_ids,
             },
@@ -873,6 +878,7 @@ def _validate_script_scene_payload(payload: dict, scene: ScenePlanScene, paragra
         block_type = block.get("type")
         text = block.get("text")
         speaker = block.get("speaker")
+        parenthetical = block.get("parenthetical")
         source_paragraph_ids = block.get("source_paragraph_ids")
         source_evidence_ids = block.get("source_evidence_ids", [])
         if not isinstance(content_block_id, str) or not content_block_id.strip():
@@ -1001,6 +1007,7 @@ def _script_ui(version: ScriptVersion) -> dict:
                 "display_label": f"{block.scene_id} {block.block_type} {block.order}",
                 "text": block.text,
                 "speaker": block.speaker,
+                "parenthetical": block.parenthetical,
                 "source_evidence_ids": block.source_evidence_ids,
                 "source_paragraph_ids": block.source_paragraph_ids,
             }
