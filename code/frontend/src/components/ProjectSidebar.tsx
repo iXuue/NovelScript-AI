@@ -231,7 +231,6 @@ export function ProjectSidebar({
                     <button
                       aria-label="新建项目"
                       className="figma-section-action icon"
-                      disabled={loading}
                       type="button"
                       onClick={() => setCreateOpen(true)}
                     >
@@ -240,7 +239,6 @@ export function ProjectSidebar({
                     <button
                       aria-label="删除项目"
                       className="figma-section-action icon"
-                      disabled={loading}
                       type="button"
                       onClick={enterDeleteMode}
                     >
