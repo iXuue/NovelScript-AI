@@ -144,6 +144,17 @@ test("App triggers scene plan generation, confirmation, script generation, and e
         scenePlanGenerated = true;
         return jsonResponse({ run_id: "run_scene", scene_plan_id: "sp_001", status: "running" });
       }
+      if (method === "POST" && path === "/projects/proj_001/conversations/primary/scene-plan-confirmation-guidance") {
+        const assistantMessage = {
+          message_id: "msg_scene_plan_guidance",
+          conversation_id: "conv_001",
+          role: "assistant" as const,
+          content: "场景规划已生成，请在右侧成果区查看并点击「确认场景规划」。如果你不满意，可以直接在对话框告诉我需要修改的点，我会先生成修改计划。",
+          created_at: "2026-06-05T00:01:01Z"
+        };
+        persistedMessages = [...persistedMessages, assistantMessage];
+        return jsonResponse({ assistant_message: assistantMessage });
+      }
       if (method === "POST" && path === "/projects/proj_001/scene-plan/confirm") {
         scenePlanConfirmed = true;
         return jsonResponse({
@@ -231,7 +242,7 @@ test("App triggers scene plan generation, confirmation, script generation, and e
           content: "修改计划已生成，目标：剧本章节 CH001。请确认后执行。",
           created_at: "2026-06-05T00:02:01Z"
         };
-        persistedMessages = [userMessage, assistantMessage];
+        persistedMessages = [...persistedMessages, userMessage, assistantMessage];
         return jsonResponse({
           feedback_plan_id: "fbp_001",
           message_id: "msg_feedback",
@@ -291,6 +302,7 @@ test("App triggers scene plan generation, confirmation, script generation, and e
   const sidebar = screen.getByLabelText("项目导航");
   const resultPane = screen.getByLabelText("成果区");
   await within(resultPane).findByText("全部场景规划");
+  await within(screen.getByLabelText("对话区")).findByText(/请在右侧成果区查看并点击「确认场景规划」/);
   expect(within(resultPane).getByText("Opening")).toBeInTheDocument();
   expect(within(resultPane).getByText("Decision")).toBeInTheDocument();
 

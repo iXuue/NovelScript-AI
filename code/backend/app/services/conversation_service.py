@@ -27,6 +27,8 @@ from app.services.scene_plan_service import generate_scene_plan_artifact
 from app.services.script_service import generate_script_from_confirmed_scene_plan, modify_script_from_feedback_plan
 from app.services.store import STORE, now_utc, persistent_id
 
+SCENE_PLAN_CONFIRMATION_GUIDANCE = "场景规划已生成，请在右侧成果区查看并点击「确认场景规划」。如果你不满意，可以直接在对话框告诉我需要修改的点，我会先生成修改计划。"
+
 
 def _message_to_dict(message: ConversationMessageRecord) -> dict:
     return {
@@ -99,6 +101,10 @@ def _append_assistant_message(project_id: str, content: str, db=None) -> dict:
 
 def send_message(project_id: str, content: str, db=None) -> dict:
     return _append_message(project_id, content, "user", db)
+
+
+def create_scene_plan_confirmation_guidance(project_id: str, db=None) -> dict:
+    return {"assistant_message": _append_assistant_message(project_id, SCENE_PLAN_CONFIRMATION_GUIDANCE, db)}
 
 
 def create_feedback_plan(project_id: str, message: str, target: dict, db, llm_provider: LLMProvider | None) -> dict:
