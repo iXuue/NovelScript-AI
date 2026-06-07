@@ -1022,6 +1022,7 @@ select:disabled {
 .figma-scene-link {
   background: transparent;
   border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--studio-muted);
   display: grid;
   gap: 2px;
@@ -1029,6 +1030,7 @@ select:disabled {
   min-height: 32px;
   padding: 6px 10px;
   text-align: left;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
   width: 100%;
 }
 
@@ -1036,7 +1038,7 @@ select:disabled {
 .figma-scene-link:hover,
 .figma-current-project:hover {
   background: rgba(255, 230, 221, 0.56);
-  border-color: rgba(223, 191, 178, 0.72);
+  border-color: rgba(223, 191, 178, 0.56);
   color: var(--studio-ink);
 }
 
@@ -1044,9 +1046,10 @@ select:disabled {
 .figma-scene-link.active,
 .figma-style-pill.active {
   background: var(--studio-primary-soft);
-  border-color: #efaa98;
+  border-color: transparent;
+  box-shadow: 0 1px 4px rgba(233, 130, 109, 0.15);
   color: #512f28;
-  font-weight: 760;
+  font-weight: 660;
 }
 
 .figma-nav-item.disclosure {
