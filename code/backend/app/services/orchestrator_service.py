@@ -65,9 +65,10 @@ def generate_scene_plan(project_id: str, db=None, llm_provider: LLMProvider | No
             update_run_status(run_id, "succeeded", db=db)
             return {"run_id": run_id, "scene_plan_id": scene_plan["scene_plan_id"], "status": "running"}
         except Exception as exc:
-            mirror_project_snapshot(db, project_id)
+            _rollback_failed_transaction(db)
             update_run_step(project_id, run_id, current_step, "failed", str(exc), db=db)
             update_run_status(run_id, "failed", str(exc), db=db)
+            mirror_project_snapshot(db, project_id)
             raise
 
     scenes = []
@@ -154,9 +155,10 @@ def generate_script(project_id: str, db=None, llm_provider: LLMProvider | None =
             update_run_step(project_id, run_id, current_step, "succeeded", "Deterministic validation completed", db=db)
             update_run_status(run_id, "succeeded", db=db)
         except Exception as exc:
-            mirror_project_snapshot(db, project_id)
+            _rollback_failed_transaction(db)
             update_run_step(project_id, run_id, current_step, "failed", str(exc), db=db)
             update_run_status(run_id, "failed", str(exc), db=db)
+            mirror_project_snapshot(db, project_id)
             raise
         result["run_id"] = run_id
         return result
@@ -249,3 +251,8 @@ def generate_script(project_id: str, db=None, llm_provider: LLMProvider | None =
     STORE.evidence_by_content_block.update(evidence_map)
     update_project_stage(project_id, ProjectStage.script_ready)
     return {"run_id": run["run_id"], "status": "running", "stage": "script_generating"}
+
+
+def _rollback_failed_transaction(db) -> None:
+    if db is not None:
+        db.rollback()
