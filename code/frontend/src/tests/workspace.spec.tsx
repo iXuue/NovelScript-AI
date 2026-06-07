@@ -105,6 +105,132 @@ test("creates a project with the typed name only", async () => {
   expect(screen.queryByText("新项目 1")).not.toBeInTheDocument();
 });
 
+test("keeps a project visible when backend deletion fails", async () => {
+  const project = {
+    project_id: "proj_delete",
+    user_id: "user_workspace",
+    name: "待删除项目",
+    stage: "empty",
+    primary_conversation_id: "conv_delete",
+    active_session_id: "sess_delete",
+    created_at: "2026-06-06T00:00:00Z",
+    updated_at: "2026-06-06T00:00:00Z"
+  };
+
+  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "workspace-token");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const path = url.pathname;
+
+      if (method === "GET" && path === "/auth/me") {
+        return jsonResponse({ user_id: "user_workspace", login_id: "workspace", created_at: "2026-06-06T00:00:00Z" });
+      }
+      if (method === "GET" && path === "/projects") return jsonResponse([project]);
+      if (method === "GET" && path === "/projects/proj_delete/conversations/primary/messages") {
+        return jsonResponse({ conversation_id: "conv_delete", messages: [] });
+      }
+      if (method === "GET" && path === "/projects/proj_delete/style-source") {
+        return jsonResponse({ project_id: "proj_delete", style_source: null, style_locked: false });
+      }
+      if (method === "GET" && path === "/projects/proj_delete/chapters/pending") return jsonResponse({ chapters: [] });
+      if (method === "GET" && path === "/projects/proj_delete/scene-plan") {
+        return jsonResponse({ error: { code: "scene_plan_not_found", message: "Scene Plan not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_delete/scripts/current/yaml-preview") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_delete/scripts/current") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_delete/runs/active") return jsonResponse(null);
+      if (method === "DELETE" && path === "/projects/proj_delete") {
+        return jsonResponse({ error: { code: "delete_failed", message: "Delete failed", details: {} } }, 500);
+      }
+
+      return jsonResponse({ error: { code: "not_mocked", message: `${method} ${path}`, details: {} } }, 500);
+    })
+  );
+
+  render(<App />);
+  const sidebar = await screen.findByLabelText("项目导航");
+  expect(within(sidebar).getByText("待删除项目")).toBeInTheDocument();
+
+  fireEvent.click(within(sidebar).getByRole("button", { name: "删除项目" }));
+  fireEvent.click(within(sidebar).getByRole("button", { name: /待删除项目/ }));
+  fireEvent.click(within(sidebar).getByRole("button", { name: "删除选中项目" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+  expect((await screen.findAllByText(/Delete failed/)).length).toBeGreaterThan(0);
+  expect(within(sidebar).getByText("待删除项目")).toBeInTheDocument();
+});
+
+test("removes a project after backend deletion succeeds", async () => {
+  const project = {
+    project_id: "proj_delete_success",
+    user_id: "user_workspace",
+    name: "可删除项目",
+    stage: "empty",
+    primary_conversation_id: "conv_delete_success",
+    active_session_id: "sess_delete_success",
+    created_at: "2026-06-06T00:00:00Z",
+    updated_at: "2026-06-06T00:00:00Z"
+  };
+  let deleteCalled = false;
+
+  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "workspace-token");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const path = url.pathname;
+
+      if (method === "GET" && path === "/auth/me") {
+        return jsonResponse({ user_id: "user_workspace", login_id: "workspace", created_at: "2026-06-06T00:00:00Z" });
+      }
+      if (method === "GET" && path === "/projects") return jsonResponse([project]);
+      if (method === "GET" && path === "/projects/proj_delete_success/conversations/primary/messages") {
+        return jsonResponse({ conversation_id: "conv_delete_success", messages: [] });
+      }
+      if (method === "GET" && path === "/projects/proj_delete_success/style-source") {
+        return jsonResponse({ project_id: "proj_delete_success", style_source: null, style_locked: false });
+      }
+      if (method === "GET" && path === "/projects/proj_delete_success/chapters/pending") return jsonResponse({ chapters: [] });
+      if (method === "GET" && path === "/projects/proj_delete_success/scene-plan") {
+        return jsonResponse({ error: { code: "scene_plan_not_found", message: "Scene Plan not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_delete_success/scripts/current/yaml-preview") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_delete_success/scripts/current") {
+        return jsonResponse({ error: { code: "script_not_found", message: "Script not found", details: {} } }, 404);
+      }
+      if (method === "GET" && path === "/projects/proj_delete_success/runs/active") return jsonResponse(null);
+      if (method === "DELETE" && path === "/projects/proj_delete_success") {
+        deleteCalled = true;
+        return new Response(null, { status: 204 });
+      }
+
+      return jsonResponse({ error: { code: "not_mocked", message: `${method} ${path}`, details: {} } }, 500);
+    })
+  );
+
+  render(<App />);
+  const sidebar = await screen.findByLabelText("项目导航");
+  expect(within(sidebar).getByText("可删除项目")).toBeInTheDocument();
+
+  fireEvent.click(within(sidebar).getByRole("button", { name: "删除项目" }));
+  fireEvent.click(within(sidebar).getByRole("button", { name: /可删除项目/ }));
+  fireEvent.click(within(sidebar).getByRole("button", { name: "删除选中项目" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+  await waitFor(() => expect(deleteCalled).toBe(true));
+  expect(within(sidebar).queryByText("可删除项目")).not.toBeInTheDocument();
+});
+
 test("yaml preview is read only", () => {
   render(<App initialYaml={"title: 测试剧本"} />);
   expect(screen.getByText("title: 测试剧本")).toBeInTheDocument();

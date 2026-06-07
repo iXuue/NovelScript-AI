@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 
-import type { AuthUser, ProjectSummary, ScenePlan, UiMode } from "../types";
+import type { AuthUser, ProjectSummary, ScenePlan, ScriptCurrentForUi, UiMode } from "../types";
 
 type ViewMode = "conversation" | "scene-plan" | "script";
 
@@ -15,6 +15,7 @@ type Props = {
   mode: UiMode;
   newProjectName: string;
   scenePlan: ScenePlan | null;
+  scriptForUi: ScriptCurrentForUi | null;
   selectedSceneId: string | null;
   statusMessage: string | null;
   viewMode: ViewMode;
@@ -39,6 +40,7 @@ function LegacyProjectSidebar({
   currentProject,
   projects,
   scenePlan,
+  scriptForUi,
   viewMode,
   onNewProject,
   onSelectProject,
@@ -117,6 +119,7 @@ export function ProjectSidebar({
   newProjectName,
   projects,
   scenePlan,
+  scriptForUi,
   selectedSceneId,
   statusMessage,
   viewMode,
@@ -134,8 +137,9 @@ export function ProjectSidebar({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
-  const [scenePlanOpen, setScenePlanOpen] = useState(false);
   const hasScenePlanScenes = Boolean(scenePlan?.scenes.length);
+  const [scenePlanOpen, setScenePlanOpen] = useState(false);
+  const [scriptOpen, setScriptOpen] = useState(false);
 
   function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -202,10 +206,9 @@ export function ProjectSidebar({
           ) : null}
 
           <div className="figma-sidebar-projects">
-            <section className="figma-sidebar-section">
-              <div className="figma-section-row">
-                <div className="figma-section-label">项目</div>
-                <div className="figma-section-actions">
+            <div className="figma-section-row">
+              <div className="figma-section-label">项目</div>
+              <div className="figma-section-actions">
                 {deleteMode ? (
                   <>
                     <button
@@ -250,7 +253,7 @@ export function ProjectSidebar({
                 )}
               </div>
             </div>
-            <div className="figma-project-list">
+            <div className="figma-sidebar-project-list">
               {projects.length > 0 ? (
                 projects.map((project) => (
                   <div className="figma-project-item" key={project.project_id}>
@@ -279,7 +282,6 @@ export function ProjectSidebar({
                 ))
               ) : null}
             </div>
-          </section>
           </div>
 
           {deleteConfirmOpen ? (
@@ -341,42 +343,76 @@ export function ProjectSidebar({
             </div>
           ) : null}
 
-          <nav className="figma-sidebar-section" aria-label="当前项目产物">
-            <div className="figma-section-label">工作区</div>
-            <button
-              aria-expanded={scenePlanOpen}
-              className={viewMode === "scene-plan" && !selectedSceneId ? "figma-nav-item active disclosure" : "figma-nav-item disclosure"}
-              type="button"
-              onClick={() => {
-                onSelectView("scene-plan");
-                setScenePlanOpen((value) => !value);
-              }}
-            >
-              <span>场景规划</span>
-              <DisclosureChevron open={scenePlanOpen} />
-            </button>
-            {scenePlanOpen && hasScenePlanScenes ? (
-              <div className="figma-scene-list">
-                {scenePlan?.scenes.map((scene) => (
-                  <button
-                    className={selectedSceneId === scene.scene_id ? "figma-scene-link active" : "figma-scene-link"}
-                    key={scene.scene_id}
-                    type="button"
-                    onClick={() => onSelectScene(scene.scene_id)}
-                  >
-                    <span>{scene.scene_id}</span>
-                    <span>{scene.title}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <button
-              className={viewMode === "script" ? "figma-nav-item active" : "figma-nav-item"}
-              type="button"
-              onClick={() => onSelectView("script")}
-            >
-              生成剧本
-            </button>
+          <nav className="figma-sidebar-workspace" aria-label="当前项目产物">
+            <div className="figma-section-row">
+              <div className="figma-section-label">工作区</div>
+            </div>
+            <div className="figma-workspace-pane">
+              <button
+                aria-expanded={scenePlanOpen}
+                className="figma-nav-item disclosure"
+                type="button"
+                onClick={() => {
+                  onSelectView("scene-plan");
+                  setScenePlanOpen((v) => !v);
+                }}
+              >
+                <span>场景规划</span>
+                <DisclosureChevron open={scenePlanOpen} />
+              </button>
+              {scenePlanOpen ? (
+                <div className="figma-scene-list">
+                  {hasScenePlanScenes && scenePlan ? (
+                    scenePlan.scenes.map((scene) => (
+                      <button
+                        className={selectedSceneId === scene.scene_id ? "figma-scene-link active" : "figma-scene-link"}
+                        key={scene.scene_id}
+                        type="button"
+                        onClick={() => onSelectScene(scene.scene_id)}
+                      >
+                        <span>{scene.scene_id}</span>
+                        <span>{scene.title}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <span className="figma-workspace-empty">暂无场景</span>
+                  )}
+                </div>
+              ) : null}
+            </div>
+            <div className="figma-workspace-pane">
+              <button
+                aria-expanded={scriptOpen}
+                className="figma-nav-item disclosure"
+                type="button"
+                onClick={() => {
+                  onSelectView("script");
+                  setScriptOpen((v) => !v);
+                }}
+              >
+                <span>生成剧本</span>
+                <DisclosureChevron open={scriptOpen} />
+              </button>
+              {scriptOpen ? (
+                <div className="figma-scene-list">
+                  {scriptForUi?.scenes.length ? (
+                    scriptForUi.scenes.map((scene) => (
+                      <button
+                        className="figma-scene-link"
+                        key={scene.scene_id}
+                        type="button"
+                        onClick={() => onSelectView("script")}
+                      >
+                        <span>{scene.scene_id}</span>
+                        <span>{scene.title}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <span className="figma-workspace-empty">暂无剧本</span>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </nav>
 
           {authUser ? (

@@ -529,7 +529,7 @@ export default function App({ initialYaml }: AppProps) {
     void runAction("正在删除项目", async () => {
       for (const projectId of projectIds) {
         if (mode === "live") {
-          await deleteProject(projectId).catch(() => undefined);
+          await deleteProject(projectId);
         }
       }
       const idSet = new Set(projectIds);
@@ -980,6 +980,7 @@ export default function App({ initialYaml }: AppProps) {
           newProjectName={newProjectName}
           projects={projects}
           scenePlan={scenePlan}
+          scriptForUi={scriptForUi}
           selectedSceneId={selectedSceneId}
           statusMessage={statusMessage}
           viewMode={viewMode}

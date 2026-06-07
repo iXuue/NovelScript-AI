@@ -117,7 +117,25 @@ def delete_project(project_id: str, db=None, user_id: str | None = None) -> None
         db.delete(project)
         db.commit()
     STORE.projects.pop(project_id, None)
+    STORE.chapters_pending.pop(project_id, None)
+    STORE.chapter_paragraphs.pop(project_id, None)
+    STORE.style_sources.pop(project_id, None)
+    STORE.style_locked.discard(project_id)
+    for file_id, file_record in list(STORE.style_files.items()):
+        if file_record.get("project_id") == project_id:
+            STORE.style_files.pop(file_id, None)
+    STORE.scene_plans.pop(project_id, None)
+    STORE.scripts.pop(project_id, None)
+    STORE.script_ui.pop(project_id, None)
+    STORE.yaml_previews.pop(project_id, None)
     STORE.conversations.pop(project_id, None)
+    STORE.active_run_by_project.pop(project_id, None)
+    for run_id, run in list(STORE.runs.items()):
+        if run.get("project_id") == project_id:
+            STORE.runs.pop(run_id, None)
+    for export_id, export in list(STORE.exports.items()):
+        if export.get("project_id") == project_id:
+            STORE.exports.pop(export_id, None)
 
 
 def update_project_stage_in_db(db, project_id: str, stage: ProjectStage) -> None:
