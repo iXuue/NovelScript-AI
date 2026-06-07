@@ -80,6 +80,7 @@ def generate_scene_plan_artifact(
     current_scene_plan = _current_scene_plan_for_feedback(db, project_id) if feedback_plan is not None else None
     scenes: list[dict] = []
     model_names: list[str] = []
+    previous_last_scene: dict | None = None
     for chapter in chapters:
         paragraphs = paragraphs_by_chapter.get(chapter.chapter_id, [])
         prompt_paragraphs = _paragraphs_for_scene_plan_feedback(chapter, paragraphs, current_scene_plan, feedback_plan)
@@ -96,6 +97,7 @@ def generate_scene_plan_artifact(
                 style_profile,
                 feedback_plan=feedback_plan,
                 current_scene_plan=current_scene_plan,
+                previous_last_scene=previous_last_scene,
             ),
             response_format="json",
             db=db,
@@ -107,7 +109,10 @@ def generate_scene_plan_artifact(
             included_item_count=1 + len(prompt_paragraphs),
         )
         model_names.append(response.model_name)
-        scenes.extend(_validate_chapter_scene_plan_payload(_load_json_object(response.text), chapter, paragraphs))
+        chapter_scenes = _validate_chapter_scene_plan_payload(_load_json_object(response.text), chapter, paragraphs)
+        scenes.extend(chapter_scenes)
+        if chapter_scenes:
+            previous_last_scene = chapter_scenes[-1]
 
     payload = _validate_scene_plan_payload(
         {"scenes": _renumber_scenes(scenes)},
@@ -328,6 +333,19 @@ def _validate_and_store_scene_plan(
     return validation
 
 
+def _previous_scene_excerpt(scene: dict) -> dict:
+    return {
+        "title": scene.get("title"),
+        "location": scene.get("location"),
+        "time": scene.get("time"),
+        "characters": scene.get("characters"),
+        "scene_function": scene.get("scene_function"),
+        "core_conflict": scene.get("core_conflict"),
+        "adaptation_note": scene.get("adaptation_note"),
+        "source_chapter_ids": scene.get("source_chapter_ids"),
+    }
+
+
 def _scene_plan_chapter_prompt(
     chapter: Chapter,
     summary: ChapterSummary,
@@ -335,6 +353,7 @@ def _scene_plan_chapter_prompt(
     style_profile: StyleProfile | None,
     feedback_plan: dict | None = None,
     current_scene_plan: dict | None = None,
+    previous_last_scene: dict | None = None,
 ) -> str:
     style_text = (
         style_profile.profile_text
@@ -354,6 +373,17 @@ def _scene_plan_chapter_prompt(
             f"{json.dumps(feedback_context, ensure_ascii=False)}\n\n"
             "current_scene_plan_excerpt:\n"
             f"{json.dumps(_scene_plan_chapter_excerpt(current_scene_plan, chapter.chapter_id), ensure_ascii=False)}"
+        )
+    prev_scene_text = ""
+    if previous_last_scene is not None:
+        prev_scene_text = (
+            "\n\nprevious_chapter_last_scene:\n"
+            f"{json.dumps(_previous_scene_excerpt(previous_last_scene), ensure_ascii=False)}\n\n"
+            "This is the final scene from the immediately preceding chapter. "
+            "If this scene represents an event that spans across chapter boundaries "
+            "(such as an ongoing conversation, an unresolved action, or a cliffhanger), "
+            "you may create one or more scenes that continue or resolve it. "
+            "Otherwise, treat chapters independently and do not force a connection.\n"
         )
     return (
         "You are the Scene Plan Worker for one confirmed novel chapter.\n"
@@ -375,6 +405,7 @@ def _scene_plan_chapter_prompt(
         f"chapter_summary:\n{_one_summary_block(summary)}\n\n"
         f"paragraphs:\n{_paragraph_block(paragraphs)}\n\n"
         f"style_profile:\n{style_text}"
+        f"{prev_scene_text}"
         f"{feedback_text}"
     )
 
