@@ -37,3 +37,4 @@ class Project(Base):
     agent_run_steps = relationship("AgentRunStep", back_populates="project", cascade="all, delete-orphan")
     conversation_messages = relationship("ConversationMessageRecord", back_populates="project", cascade="all, delete-orphan")
     source_files = relationship("SourceFileRecord", back_populates="project", cascade="all, delete-orphan")
+    feedback_plan_cache_entries = relationship("FeedbackPlanCacheEntry", back_populates="project", cascade="all, delete-orphan")

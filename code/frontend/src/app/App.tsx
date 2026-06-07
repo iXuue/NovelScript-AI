@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiRequestError,
   confirmChapters,
+  confirmFeedbackPlan,
   confirmScenePlan,
+  createFeedbackPlan,
   createExport,
   createProject,
   generateScenePlan,
@@ -20,7 +22,6 @@ import {
   listProjects,
   loginUser,
   logoutUser,
-  modifyScript,
   repairScenePlan,
   repairScriptScene,
   registerUser,
@@ -53,6 +54,8 @@ import type {
   EvidenceLookupResult,
   ExportFormat,
   ExportResult,
+  FeedbackPlan,
+  FeedbackTarget,
   ProjectStage,
   ProjectSummary,
   ScenePlan,
@@ -65,6 +68,12 @@ import type {
 
 type AppProps = {
   initialYaml?: string;
+};
+
+type FeedbackTargetOption = {
+  key: string;
+  label: string;
+  target: FeedbackTarget;
 };
 
 const AUTH_TOKEN_STORAGE_KEY = "novelscript_auth_token";
@@ -191,6 +200,8 @@ export default function App({ initialYaml }: AppProps) {
   const [scriptForUi, setScriptForUi] = useState<ScriptCurrentForUi | null>(null);
   const [fallbackEvidence, setFallbackEvidence] = useState<Record<string, EvidenceLookupResult>>({});
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const [pendingFeedbackPlan, setPendingFeedbackPlan] = useState<FeedbackPlan | null>(null);
+  const [feedbackTargetKey, setFeedbackTargetKey] = useState("script");
   const [progress, setProgress] = useState<AgentProgress | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingLabel, setLoadingLabel] = useState<string | null>(null);
@@ -316,6 +327,8 @@ export default function App({ initialYaml }: AppProps) {
     setScriptForUi(null);
     setFallbackEvidence({});
     setMessages([]);
+    setPendingFeedbackPlan(null);
+    setFeedbackTargetKey("script");
     setLatestExport(null);
     setUploadedNovelName(null);
     setFailedStage(null);
@@ -577,7 +590,7 @@ export default function App({ initialYaml }: AppProps) {
             setError("剧本场景校验未通过，请修复失败场景后继续。");
             return;
           }
-          setMode("demo");
+          throw err;
         }
       }
       const generated = createDemoScript(activeProject.name, scenePlan);
@@ -589,20 +602,94 @@ export default function App({ initialYaml }: AppProps) {
     });
   }
 
+  const feedbackTargetOptions = useMemo<FeedbackTargetOption[]>(() => {
+    if (scriptForUi) {
+      const options: FeedbackTargetOption[] = [{ key: "script", label: "整部剧本", target: { type: "script" } }];
+      const chapterIds = new Set<string>();
+      for (const scene of scriptForUi.scenes) {
+        for (const chapterId of scene.source_chapter_ids) {
+          chapterIds.add(chapterId);
+        }
+      }
+      for (const chapterId of chapterIds) {
+        options.push({ key: `chapter:${chapterId}`, label: `章节 ${chapterId}`, target: { type: "chapter", chapter_id: chapterId } });
+      }
+      for (const scene of scriptForUi.scenes) {
+        options.push({ key: `scene:${scene.scene_id}`, label: `${scene.scene_id} ${scene.title}`, target: { type: "scene", scene_id: scene.scene_id } });
+      }
+      return options;
+    }
+    if (scenePlan) {
+      return [{ key: "scene_plan", label: "场景规划", target: { type: "scene_plan" } }];
+    }
+    return [];
+  }, [scenePlan, scriptForUi]);
+
+  useEffect(() => {
+    if (feedbackTargetOptions.length === 0) {
+      if (feedbackTargetKey !== "script") setFeedbackTargetKey("script");
+      return;
+    }
+    if (!feedbackTargetOptions.some((option) => option.key === feedbackTargetKey)) {
+      setFeedbackTargetKey(feedbackTargetOptions[0].key);
+    }
+  }, [feedbackTargetKey, feedbackTargetOptions]);
+
+  function buildFeedbackTarget(): FeedbackTarget | null {
+    const selected = feedbackTargetOptions.find((option) => option.key === feedbackTargetKey);
+    return selected?.target ?? feedbackTargetOptions[0]?.target ?? null;
+  }
+
   function handleSubmitMessage(content: string) {
     if (!activeProject) return;
     const local = createLocalMessage(activeProject, content);
     setMessages((items) => [...items, local]);
     if (mode !== "live") return;
-    void runAction("正在发送消息", async () => {
-      if (scriptPreview) {
-        await modifyScript(activeProject.project_id, content, { type: "script" });
-      } else {
-        await sendMessage(activeProject.project_id, content);
+    void runAction("正在生成修改计划", async () => {
+      const target = buildFeedbackTarget();
+      if (target) {
+        const plan = await createFeedbackPlan(activeProject.project_id, content, target);
+        setPendingFeedbackPlan(plan);
+        if (plan.message) {
+          setMessages((items) => items.map((item) => (item.message_id === local.message_id ? plan.message : item)));
+        }
+        return;
       }
+      const saved = await sendMessage(activeProject.project_id, content);
+      setMessages((items) => items.map((item) => (item.message_id === local.message_id ? saved : item)));
     });
   }
 
+  function handleCancelFeedbackPlan() {
+    setPendingFeedbackPlan(null);
+  }
+
+  function handleConfirmFeedbackPlan() {
+    if (!activeProject || !pendingFeedbackPlan) return;
+    const plan = pendingFeedbackPlan;
+    void runAction("正在执行修改计划", async () => {
+      await confirmFeedbackPlan(activeProject.project_id, plan.feedback_plan_id);
+      setPendingFeedbackPlan(null);
+      const latestMessages = await getPrimaryMessages(activeProject.project_id).catch(() => null);
+      if (latestMessages) setMessages(latestMessages.messages);
+      if (plan.stage === "scene_plan") {
+        const current = await getScenePlan(activeProject.project_id);
+        setScenePlan(current);
+        setScenePlanConfirmed(current.confirmed);
+        setScriptPreview(null);
+        setScriptForUi(null);
+        setActiveProjectPatch({ stage: "scene_plan_draft" });
+        setViewMode("scene-plan");
+        return;
+      }
+      const preview = await getYamlPreview(activeProject.project_id);
+      const ui = await getCurrentScriptForUi(activeProject.project_id);
+      setScriptPreview(preview);
+      setScriptForUi(ui);
+      setActiveProjectPatch({ stage: "script_ready" });
+      setViewMode("script");
+    });
+  }
   function handleExport(format: ExportFormat) {
     if (!activeProject || !scriptPreview) return;
     void runAction("正在导出", async () => {
@@ -760,6 +847,9 @@ export default function App({ initialYaml }: AppProps) {
             hasNovelUpload={hasNovelUpload}
             loading={loading}
             messages={messages}
+            pendingFeedbackPlan={pendingFeedbackPlan}
+            feedbackTargetOptions={feedbackTargetOptions}
+            selectedFeedbackTargetKey={feedbackTargetKey}
             mode={mode}
             projectName={activeProject.name}
             selectedStyle={styleSourceValue}
@@ -769,6 +859,9 @@ export default function App({ initialYaml }: AppProps) {
             onConfirmChapters={handleConfirmChapters}
             onGenerateScenePlan={handleGenerateScenePlan}
             onGenerateScript={handleGenerateScript}
+            onConfirmFeedbackPlan={handleConfirmFeedbackPlan}
+            onCancelFeedbackPlan={handleCancelFeedbackPlan}
+            onFeedbackTargetChange={setFeedbackTargetKey}
             onNovelSelected={handleNovelSelected}
             onStyleChange={handleStyleSourceChange}
             onStyleReferenceSelected={handleStyleReferenceSelected}

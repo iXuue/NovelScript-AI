@@ -86,13 +86,14 @@ class FakeAnalysisLLMProvider(LLMProvider):
             source_paragraph_id = paragraph_match.group(1) if paragraph_match else "CH001_P001"
             chapter_match = re.search(r'"chapter_id":\s*"(CH\d+)"', request.prompt)
             source_chapter_id = chapter_match.group(1) if chapter_match else source_paragraph_id.split("_", 1)[0]
+            feedback_prefix = "Feedback " if "confirmed_feedback_plan:" in request.prompt else ""
             text = json_dumps(
                 {
                     "scenes": [
                         {
                             "scene_id": "S001",
                             "order": 1,
-                            "title": "Rainy Return",
+                            "title": f"{feedback_prefix}Rainy Return",
                             "source_chapter_ids": [source_chapter_id],
                             "source_evidence_ids": [],
                             "source_paragraph_ids": [source_paragraph_id],
@@ -120,11 +121,47 @@ class FakeAnalysisLLMProvider(LLMProvider):
                     "coverage": {"chapter_ids": ["CH001"], "paragraph_ids": ["CH001_P001"]},
                 }
             )
+        elif request.task_type == "feedback_plan":
+            target_match = re.search(r'"type":\s*"(scene_plan|script|chapter|scene)"', request.prompt)
+            target_type = target_match.group(1) if target_match else "script"
+            intent_by_target = {
+                "scene_plan": "regenerate_scene_plan",
+                "script": "regenerate_script",
+                "chapter": "modify_chapter",
+                "scene": "modify_scene",
+            }
+            scene_match = re.search(r'"scene_id":\s*"(S\d+)"', request.prompt)
+            chapter_match = re.search(r'"chapter_id":\s*"(CH\d+)"', request.prompt)
+            text = json_dumps(
+                {
+                    "intent": intent_by_target[target_type],
+                    "affected_scope": {
+                        "chapter_ids": [chapter_match.group(1)] if chapter_match else [],
+                        "scene_ids": [scene_match.group(1)] if scene_match else [],
+                    },
+                    "modification_plan": ["Apply the user's feedback while preserving source facts."],
+                    "needs_source_text": True,
+                    "source_requests": [
+                        {
+                            "paragraph_ids": ["CH001_P001"],
+                            "scene_ids": [scene_match.group(1)] if scene_match else [],
+                            "chapter_ids": [chapter_match.group(1)] if chapter_match else [],
+                            "reason": "Use the source paragraph to keep factual continuity.",
+                        }
+                    ],
+                    "user_confirmation_required": True,
+                }
+            )
         elif request.task_type == "script_generation":
             scene_matches = re.findall(r'"scene_id":\s*"(S\d+)"', request.prompt)
             scene_id = scene_matches[-1] if scene_matches else "S001"
             paragraph_matches = re.findall(r'"source_paragraph_ids":\s*\[\s*"(CH\d+_P\d+)"', request.prompt)
             source_paragraph_id = paragraph_matches[-1] if paragraph_matches else "CH001_P001"
+            action_text = (
+                "Feedback revised scene from the confirmed plan."
+                if "confirmed_feedback_plan:" in request.prompt
+                else "She stands outside the old house gate."
+            )
             text = json_dumps(
                 {
                     "scene_id": scene_id,
@@ -137,7 +174,7 @@ class FakeAnalysisLLMProvider(LLMProvider):
                         {
                             "content_block_id": "CB001",
                             "type": "action",
-                            "text": "She stands outside the old house gate.",
+                            "text": action_text,
                             "speaker": None,
                             "source_evidence_ids": [],
                             "source_paragraph_ids": [source_paragraph_id],

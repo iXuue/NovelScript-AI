@@ -1,9 +1,15 @@
 from app.core.database import get_db
+import app.core.config as config
 from app.models.analysis import ChapterSummary, EvidenceItem
 
 
 def test_scene_plan_timeout_keeps_completed_analysis_snapshot(client, tmp_path, monkeypatch):
-    monkeypatch.setenv("LOCAL_DATA_ROOT", str(tmp_path))
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"USE_LOCAL_STORAGE=true\nLOCAL_DATA_ROOT={tmp_path}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "DEFAULT_ENV_FILE", env_file)
     original_generate = client.fake_llm_provider.generate
 
     def fail_on_scene_plan_chapter(request):
@@ -26,7 +32,7 @@ def test_scene_plan_timeout_keeps_completed_analysis_snapshot(client, tmp_path, 
     except TimeoutError:
         pass
 
-    project_dirs = list(tmp_path.iterdir())
+    project_dirs = [path for path in tmp_path.iterdir() if path.is_dir()]
     assert len(project_dirs) == 1
     assert (project_dirs[0] / "chapter_summaries.json").exists()
     assert (project_dirs[0] / "evidence_items.json").exists()

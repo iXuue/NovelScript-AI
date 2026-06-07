@@ -15,6 +15,7 @@ from app.services.checkpoint_service import create_checkpoint
 from app.services.context_budget_service import compact_lines, generate_with_context_log, rank_evidence_items, truncate_text
 from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage, update_project_stage_in_db
+from app.services.source_id_service import normalize_paragraph_ids
 from app.services.store import STORE, now_utc, persistent_id
 from app.services.style_service import lock_style_source
 
@@ -64,6 +65,7 @@ def generate_scene_plan_artifact(
     project_id: str,
     llm_provider: LLMProvider | None,
     run_id: str | None = None,
+    feedback_plan: dict | None = None,
 ) -> dict:
     chapters = _confirmed_chapters(db, project_id)
     summaries = _chapter_summaries(db, project_id)
@@ -75,17 +77,26 @@ def generate_scene_plan_artifact(
 
     summary_by_chapter = {summary.chapter_id: summary for summary in summaries}
     paragraphs_by_chapter = _paragraphs_by_chapter(db, project_id)
+    current_scene_plan = _current_scene_plan_for_feedback(db, project_id) if feedback_plan is not None else None
     scenes: list[dict] = []
     model_names: list[str] = []
     for chapter in chapters:
         paragraphs = paragraphs_by_chapter.get(chapter.chapter_id, [])
+        prompt_paragraphs = _paragraphs_for_scene_plan_feedback(chapter, paragraphs, current_scene_plan, feedback_plan)
         summary = summary_by_chapter.get(chapter.chapter_id)
         if summary is None:
             raise RuntimeError(f"scene_plan requires chapter summary for {chapter.chapter_id}")
         response = generate_with_context_log(
             llm_provider,
             task_type="scene_plan_chapter",
-            prompt=_scene_plan_chapter_prompt(chapter, summary, paragraphs, style_profile),
+            prompt=_scene_plan_chapter_prompt(
+                chapter,
+                summary,
+                prompt_paragraphs,
+                style_profile,
+                feedback_plan=feedback_plan,
+                current_scene_plan=current_scene_plan,
+            ),
             response_format="json",
             db=db,
             project_id=project_id,
@@ -93,7 +104,7 @@ def generate_scene_plan_artifact(
             step_type="scene_plan",
             chunk_range={"chapter_id": chapter.chapter_id, "chapter_order": chapter.order},
             source_item_count=1 + len(paragraphs),
-            included_item_count=1 + len(paragraphs),
+            included_item_count=1 + len(prompt_paragraphs),
         )
         model_names.append(response.model_name)
         scenes.extend(_validate_chapter_scene_plan_payload(_load_json_object(response.text), chapter, paragraphs))
@@ -322,12 +333,28 @@ def _scene_plan_chapter_prompt(
     summary: ChapterSummary,
     paragraphs: list[Paragraph],
     style_profile: StyleProfile | None,
+    feedback_plan: dict | None = None,
+    current_scene_plan: dict | None = None,
 ) -> str:
     style_text = (
         style_profile.profile_text
         if style_profile is not None
         else "Use a neutral, clear adaptation style. Keep scenes filmable, concise, and faithful to the source material."
     )
+    feedback_text = ""
+    if feedback_plan is not None:
+        feedback_context = {
+            "target": feedback_plan.get("target"),
+            "user_feedback": feedback_plan.get("user_feedback"),
+            "confirmed_modification_plan": feedback_plan.get("modification_plan"),
+            "source_requests": feedback_plan.get("source_requests"),
+        }
+        feedback_text = (
+            "\n\nconfirmed_feedback_plan:\n"
+            f"{json.dumps(feedback_context, ensure_ascii=False)}\n\n"
+            "current_scene_plan_excerpt:\n"
+            f"{json.dumps(_scene_plan_chapter_excerpt(current_scene_plan, chapter.chapter_id), ensure_ascii=False)}"
+        )
     return (
         "You are the Scene Plan Worker for one confirmed novel chapter.\n"
         "Create filmable scene-outline entries for this chapter only. Use only supplied chapter summary and paragraphs.\n"
@@ -348,6 +375,7 @@ def _scene_plan_chapter_prompt(
         f"chapter_summary:\n{_one_summary_block(summary)}\n\n"
         f"paragraphs:\n{_paragraph_block(paragraphs)}\n\n"
         f"style_profile:\n{style_text}"
+        f"{feedback_text}"
     )
 
 
@@ -376,6 +404,12 @@ def _validate_chapter_scene_plan_payload(payload: dict, chapter: Chapter, paragr
             validated[field] = value
         if not validated["source_paragraph_ids"]:
             raise RuntimeError("scene_plan_chapter source_paragraph_ids must be non-empty")
+        if any(not isinstance(paragraph_id, str) or not paragraph_id.strip() for paragraph_id in validated["source_paragraph_ids"]):
+            raise RuntimeError("scene_plan_chapter source_paragraph_ids must contain non-empty strings")
+        validated["source_paragraph_ids"] = normalize_paragraph_ids(
+            [paragraph_id.strip() for paragraph_id in validated["source_paragraph_ids"]],
+            paragraph_ids,
+        )
         unknown_paragraphs = set(validated["source_paragraph_ids"]) - paragraph_ids
         if unknown_paragraphs:
             raise RuntimeError(f"scene_plan_chapter references unknown paragraphs: {sorted(unknown_paragraphs)}")
@@ -533,6 +567,63 @@ def scene_plan_to_dict_without_validation(scene_plan: ScenePlan) -> dict:
     data = scene_plan_to_dict(scene_plan)
     data.pop("validation", None)
     return data
+
+
+def _current_scene_plan_for_feedback(db: Session, project_id: str) -> dict | None:
+    scene_plan = (
+        db.query(ScenePlan)
+        .filter(ScenePlan.project_id == project_id, ScenePlan.is_current.is_(True))
+        .order_by(ScenePlan.version_number.desc())
+        .first()
+    )
+    return scene_plan_to_dict_without_validation(scene_plan) if scene_plan is not None else None
+
+
+def _paragraphs_for_scene_plan_feedback(
+    chapter: Chapter,
+    paragraphs: list[Paragraph],
+    current_scene_plan: dict | None,
+    feedback_plan: dict | None,
+) -> list[Paragraph]:
+    if feedback_plan is None:
+        return paragraphs
+    requested_ids = set()
+    for request in feedback_plan.get("source_requests") or []:
+        if isinstance(request, dict):
+            requested_ids.update(str(paragraph_id) for paragraph_id in request.get("paragraph_ids") or [])
+    chapter_paragraph_ids = {paragraph.paragraph_id for paragraph in paragraphs}
+    selected_ids = requested_ids & chapter_paragraph_ids
+    if not selected_ids and current_scene_plan is not None:
+        for scene in current_scene_plan.get("scenes") or []:
+            if chapter.chapter_id in (scene.get("source_chapter_ids") or []):
+                selected_ids.update(paragraph_id for paragraph_id in scene.get("source_paragraph_ids") or [] if paragraph_id in chapter_paragraph_ids)
+    if not selected_ids:
+        return paragraphs
+    selected = [paragraph for paragraph in paragraphs if paragraph.paragraph_id in selected_ids]
+    return selected or paragraphs
+
+
+def _scene_plan_chapter_excerpt(current_scene_plan: dict | None, chapter_id: str) -> dict:
+    if current_scene_plan is None:
+        return {"scenes": []}
+    return {
+        "scene_plan_id": current_scene_plan.get("scene_plan_id"),
+        "scenes": [
+            {
+                "scene_id": scene.get("scene_id"),
+                "title": scene.get("title"),
+                "source_chapter_ids": scene.get("source_chapter_ids"),
+                "source_paragraph_ids": scene.get("source_paragraph_ids"),
+                "location": scene.get("location"),
+                "time": scene.get("time"),
+                "characters": scene.get("characters"),
+                "scene_function": scene.get("scene_function"),
+                "core_conflict": scene.get("core_conflict"),
+            }
+            for scene in current_scene_plan.get("scenes") or []
+            if chapter_id in (scene.get("source_chapter_ids") or [])
+        ],
+    }
 
 
 def _chapter_block(chapters: list[Chapter]) -> str:
@@ -712,6 +803,12 @@ def _validate_scene_plan_payload(payload: dict, chapter_ids: set[str], paragraph
             raise RuntimeError("scene_plan scene_id must be unique")
         if validated["scene_id"] != f"S{expected_order:03d}":
             raise RuntimeError("scene_plan scene_id must match scene order")
+        if any(not isinstance(paragraph_id, str) or not paragraph_id.strip() for paragraph_id in validated["source_paragraph_ids"]):
+            raise RuntimeError("scene_plan scene field source_paragraph_ids must contain non-empty strings")
+        validated["source_paragraph_ids"] = normalize_paragraph_ids(
+            [paragraph_id.strip() for paragraph_id in validated["source_paragraph_ids"]],
+            paragraph_ids,
+        )
         unknown_chapters = set(validated["source_chapter_ids"]) - chapter_ids
         unknown_paragraphs = set(validated["source_paragraph_ids"]) - paragraph_ids
         if unknown_chapters:

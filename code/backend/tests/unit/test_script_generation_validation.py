@@ -3,6 +3,7 @@ import pytest
 from app.domain.artifacts import ArtifactStatus
 from app.models.script import ScriptContentBlock, ScriptScene, ScriptVersion
 from app.services.script_service import _replace_script_scene_content, _validate_script_scene_payload
+from app.services.source_id_service import normalize_paragraph_id
 from app.services.store import now_utc
 
 
@@ -74,6 +75,54 @@ def test_unknown_source_paragraph_is_rejected():
 
     with pytest.raises(RuntimeError, match="unknown paragraphs"):
         _validate_script_scene_payload(payload, SceneStub(), {"CH001_P001"})
+
+
+def test_empty_source_paragraph_error_includes_block_id():
+    payload = {
+        "scene_id": "S001",
+        "title": "Rainy Return",
+        "content_blocks": [
+            {
+                "content_block_id": "CB009",
+                "type": "action",
+                "text": "She waits at the gate.",
+                "speaker": None,
+                "source_evidence_ids": [],
+                "source_paragraph_ids": [],
+            }
+        ],
+    }
+
+    with pytest.raises(RuntimeError, match="CB009 source_paragraph_ids must be non-empty"):
+        _validate_script_scene_payload(payload, SceneStub(), {"CH001_P001"})
+
+
+def test_source_paragraph_ids_are_normalized_when_known():
+    scene = SceneStub()
+    scene.source_paragraph_ids = ["CH001_P011", "CH002_P003"]
+    payload = {
+        "scene_id": "S001",
+        "title": "Rainy Return",
+        "content_blocks": [
+            {
+                "content_block_id": "CB001",
+                "type": "action",
+                "text": "She waits at the gate.",
+                "speaker": None,
+                "source_evidence_ids": [],
+                "source_paragraph_ids": ["CH001_P11", "CH2_P3"],
+            }
+        ],
+    }
+
+    validated = _validate_script_scene_payload(payload, scene, {"CH001_P011", "CH002_P003"})
+
+    assert validated["content_blocks"][0]["source_paragraph_ids"] == ["CH001_P011", "CH002_P003"]
+
+
+def test_source_paragraph_id_normalization_keeps_unknown_values_rejectable():
+    assert normalize_paragraph_id("CH999_P1", {"CH001_P001"}) == "CH999_P1"
+    assert normalize_paragraph_id("BAD_ID", {"CH001_P001"}) == "BAD_ID"
 
 
 def test_repair_scene_reassigns_block_ids_that_collide_with_later_scenes(test_db):

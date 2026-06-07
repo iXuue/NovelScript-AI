@@ -122,7 +122,7 @@ test("custom style text disables reference script upload", async () => {
   });
   fireEvent.click(within(dialog).getByRole("button", { name: "保存" }));
   await screen.findByText("请上传小说并完成风格设计");
-  fireEvent.click(screen.getByRole("button", { name: "点击设计生成风格" }));
+  fireEvent.click(screen.getByRole("button", { name: /设计生成风格/ }));
   fireEvent.change(screen.getByLabelText(/自定义风格描述/), {
     target: { value: "对白短促，节奏紧张" }
   });

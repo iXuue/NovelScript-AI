@@ -82,3 +82,14 @@ def test_script_generation_does_not_call_script_scene_validation_llm(client):
     task_types = [request.task_type for request in client.fake_llm_provider.requests]
     assert "script_generation" in task_types
     assert "script_scene_validation" not in task_types
+
+
+def test_script_generation_runtime_failure_returns_api_error(client):
+    project_id = _prepare_confirmed_scene_plan(client)
+    client.fake_llm_provider.fail_next_request = True
+
+    generated = client.post(f"/projects/{project_id}/scripts/generate")
+
+    assert generated.status_code == 502
+    assert generated.json()["error"]["code"] == "script_generation_failed"
+    assert generated.json()["error"]["details"]["reason"] == "fake LLM failure"

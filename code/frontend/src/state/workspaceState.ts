@@ -79,27 +79,59 @@ export function createDemoScript(projectName: string, scenePlan: ScenePlan): {
     core_conflict: scene.core_conflict,
   }));
 
-  const contentBlocks = scenePlan.scenes.map((scene, index) => ({
-    content_block_id: `CB${String(index + 1).padStart(3, "0")}`,
-    scene_id: scene.scene_id,
-    block_type: "action" as const,
-    display_label: `${scene.scene_id} 动作 1`,
-    text: index === 0 ? "主要角色停在关键地点，行动即将开始。" : "沉默被一句追问打破，冲突继续推进。",
-    speaker: null,
-    source_evidence_ids: [],
-    source_paragraph_ids: scene.source_paragraph_ids,
-  }));
+  const contentBlocks = scenePlan.scenes.flatMap((scene, sceneIndex) => {
+    const blockBase = sceneIndex * 3;
+    const sourceParagraphIds = scene.source_paragraph_ids;
+    return [
+      {
+        content_block_id: `CB${String(blockBase + 1).padStart(3, "0")}`,
+        scene_id: scene.scene_id,
+        block_type: "action" as const,
+        display_label: `${scene.scene_id} 动作 1`,
+        text: `${scene.location}里，${scene.characters[0] ?? "主要角色"}停下脚步，周围的目光压过来。`,
+        speaker: null,
+        source_evidence_ids: [],
+        source_paragraph_ids: sourceParagraphIds,
+      },
+      {
+        content_block_id: `CB${String(blockBase + 2).padStart(3, "0")}`,
+        scene_id: scene.scene_id,
+        block_type: "dialogue" as const,
+        display_label: `${scene.scene_id} 对白 1`,
+        text: "这件事不会就这样结束。",
+        speaker: scene.characters[0] ?? "主要角色",
+        source_evidence_ids: [],
+        source_paragraph_ids: sourceParagraphIds,
+      },
+      {
+        content_block_id: `CB${String(blockBase + 3).padStart(3, "0")}`,
+        scene_id: scene.scene_id,
+        block_type: "transition" as const,
+        display_label: `${scene.scene_id} 转场 1`,
+        text: "切至下一处关键地点。",
+        speaker: null,
+        source_evidence_ids: [],
+        source_paragraph_ids: sourceParagraphIds,
+      },
+    ];
+  });
 
   const yamlScenes = scenePlan.scenes
     .map(
-      (scene, index) => `  - scene_id: ${scene.scene_id}
+      (scene) => `  - scene_id: ${scene.scene_id}
     title: ${scene.title}
-    location: ${scene.location ?? "待定"}
-    time: ${scene.time ?? "待定"}
+    scene_info: ${scene.interior_exterior} / ${scene.location ?? "待定"} / ${scene.time ?? "待定"}
     characters: [${scene.characters.join(", ")}]
-    beats:
+    scene_purpose: ${scene.scene_function}
+    core_conflict: ${scene.core_conflict}
+    content_blocks:
       - type: action
-        text: ${index === 0 ? "主要角色停在关键地点，行动即将开始。" : "沉默被一句追问打破，冲突继续推进。"}`
+        text: ${scene.location}里，${scene.characters[0] ?? "主要角色"}停下脚步，周围的目光压过来。
+      - type: dialogue
+        speaker: ${scene.characters[0] ?? "主要角色"}
+        text: 这件事不会就这样结束。
+      - type: transition
+        text: 切至下一处关键地点。`
     )
     .join("\n");
 
@@ -112,22 +144,26 @@ ${yamlScenes}
 `;
 
   const evidence = Object.fromEntries(
-    contentBlocks.map((block, index) => [
-      block.content_block_id,
-      {
-        content_block_id: block.content_block_id,
-        evidence: [
-          {
-            source_evidence_id: null,
-            source_paragraph_id: block.source_paragraph_ids[0],
-            chapter_id: scenePlan.scenes[index].source_chapter_ids[0],
-            paragraph_id: block.source_paragraph_ids[0] ?? `${scenePlan.scenes[index].source_chapter_ids[0]}_P001`,
-            paragraph_ids: [block.source_paragraph_ids[0] ?? `${scenePlan.scenes[index].source_chapter_ids[0]}_P001`],
-            text: index === 0 ? "主要角色准备采取行动。" : "关键线索被重新提出。"
-          }
-        ]
-      }
-    ])
+    contentBlocks.map((block, index) => {
+      const scene = scenePlan.scenes[Math.floor(index / 3)];
+      const fallbackParagraphId = `${scene.source_chapter_ids[0]}_P001`;
+      return [
+        block.content_block_id,
+        {
+          content_block_id: block.content_block_id,
+          evidence: [
+            {
+              source_evidence_id: null,
+              source_paragraph_id: block.source_paragraph_ids[0],
+              chapter_id: scene.source_chapter_ids[0],
+              paragraph_id: block.source_paragraph_ids[0] ?? fallbackParagraphId,
+              paragraph_ids: [block.source_paragraph_ids[0] ?? fallbackParagraphId],
+              text: block.text ?? "剧本内容来自场景计划。"
+            }
+          ]
+        }
+      ] as const;
+    })
   );
 
   return {
