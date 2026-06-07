@@ -949,6 +949,8 @@ export default function App({ initialYaml }: AppProps) {
             error={error}
             hasNovelUpload={hasNovelUpload}
             loading={loading}
+            activeLabel={loadingLabel}
+            progress={progress}
             messages={messages}
             pendingFeedbackPlan={pendingFeedbackPlan}
             feedbackChapterOptions={feedbackChapterOptions}
@@ -988,12 +990,10 @@ export default function App({ initialYaml }: AppProps) {
           onMouseDown={handleResultPanelResizeStart}
         />
         <ResultPane
-          activeLabel={loadingLabel}
           failedStage={failedStage}
           fallbackEvidence={fallbackEvidence}
           latestExport={latestExport}
           loading={loading}
-          progress={progress}
           projectId={activeProject?.project_id ?? ""}
           scenePlan={scenePlan}
           scenePlanConfirmed={scenePlanConfirmed}
