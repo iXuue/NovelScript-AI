@@ -185,13 +185,11 @@ export function ProjectSidebar({
   return (
     <aside className={collapsed ? "figma-sidebar collapsed" : "figma-sidebar"} aria-label="项目导航">
       <div className="figma-brand-row">
-        {!collapsed ? (
-          <div>
-            <div className="figma-brand-title">NovelScript AI</div>
-          </div>
-        ) : null}
-        <button className="figma-icon-button" type="button" onClick={onToggleCollapsed} aria-label={collapsed ? "展开侧栏" : "收起侧栏"}>
-          {collapsed ? "▶" : "◀"}
+        <div>
+          <div className="figma-brand-title">NovelScript AI</div>
+        </div>
+        <button className="figma-icon-button" type="button" onClick={onToggleCollapsed} aria-label="收起侧栏">
+          ◀
         </button>
       </div>
 

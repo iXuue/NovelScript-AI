@@ -968,6 +968,16 @@ export default function App({ initialYaml }: AppProps) {
         </div>
       </header>
       <StatusBanner error={error} message={statusMessage} mode={mode} />
+      {sidebarCollapsed ? (
+        <button
+          aria-label="展开侧栏"
+          className="figma-sidebar-float-toggle"
+          type="button"
+          onClick={() => setSidebarCollapsed(false)}
+        >
+          ▶
+        </button>
+      ) : null}
       <div className="workspace-grid">
         <ProjectSidebar
           collapsed={sidebarCollapsed}
