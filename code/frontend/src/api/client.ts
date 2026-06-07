@@ -222,6 +222,12 @@ export async function sendMessage(
   });
 }
 
+export async function createScenePlanConfirmationGuidance(projectId: string): Promise<{ assistant_message: ConversationMessage | null }> {
+  return requestJson(`/projects/${projectId}/conversations/primary/scene-plan-confirmation-guidance`, {
+    method: "POST"
+  });
+}
+
 export async function modifyScript(
   projectId: string,
   message: string,

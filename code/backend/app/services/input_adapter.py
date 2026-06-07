@@ -3,6 +3,7 @@ from email.parser import BytesParser
 from email.policy import default
 from io import BytesIO
 from pathlib import Path
+import re
 
 from app.services.document_conversion_service import convert_document
 
@@ -42,11 +43,11 @@ def parse_multipart_files(body: bytes, content_type: str, field_names: list[str]
 def normalize_to_markdown(filename: str, content: bytes) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix == ".doc":
-        return _docx_to_markdown(convert_document(content, ".doc", ".docx"))
+        return _strip_image_references(_docx_to_markdown(convert_document(content, ".doc", ".docx")))
     if suffix in {".md", ".txt"}:
-        return content.decode("utf-8-sig")
+        return _strip_image_references(content.decode("utf-8-sig"))
     if suffix == ".docx":
-        return _docx_to_markdown(content)
+        return _strip_image_references(_docx_to_markdown(content))
     if suffix == ".pdf":
         try:
             from pypdf import PdfReader
@@ -55,7 +56,7 @@ def normalize_to_markdown(filename: str, content: bytes) -> str:
 
         reader = PdfReader(BytesIO(content))
         pages = [(page.extract_text() or "").strip() for page in reader.pages]
-        return "\n\n".join(page for page in pages if page)
+        return _strip_image_references("\n\n".join(page for page in pages if page))
     from app.services.document_conversion_service import UnsupportedDocumentTypeError
 
     raise UnsupportedDocumentTypeError(f"unsupported file type: {suffix}")
@@ -66,4 +67,15 @@ def _docx_to_markdown(content: bytes) -> str:
 
     document = Document(BytesIO(content))
     return "\n\n".join(p.text for p in document.paragraphs if p.text.strip())
+
+
+def _strip_image_references(text: str) -> str:
+    cleaned = re.sub(r"<img\b[^>]*>", "", text, flags=re.IGNORECASE)
+    cleaned = re.sub(r"!\[\[[^\]]+\]\]", "", cleaned)
+    cleaned = re.sub(r"!\[[^\]]*]\([^)]*\)", "", cleaned)
+    cleaned = re.sub(r"!\[[^\]]*]\[[^\]]*]", "", cleaned)
+    cleaned = re.sub(r"(?m)^[ \t]*\[[^\]]+]:[ \t]*\S+\.(?:png|jpe?g|gif|webp|bmp|svg)(?:[ \t].*)?$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 

@@ -27,6 +27,22 @@ def _prepare_script_project(client, chapters: int = 1) -> str:
     return project_id
 
 
+def test_scene_plan_confirmation_guidance_persists_assistant_message(client):
+    project_id = _prepare_project(client)
+
+    guidance = client.post(f"/projects/{project_id}/conversations/primary/scene-plan-confirmation-guidance")
+
+    assert guidance.status_code == 200
+    payload = guidance.json()
+    assert payload["assistant_message"]["role"] == "assistant"
+    assert "右侧成果区" in payload["assistant_message"]["content"]
+    assert "确认场景规划" in payload["assistant_message"]["content"]
+
+    messages = client.get(f"/projects/{project_id}/conversations/primary/messages").json()["messages"]
+    assert [message["role"] for message in messages] == ["assistant"]
+    assert messages[-1]["content"] == payload["assistant_message"]["content"]
+
+
 def test_scene_plan_feedback_uses_cache_and_waits_for_confirmation(client):
     project_id = _prepare_project(client)
     before = client.get(f"/projects/{project_id}/scene-plan").json()["scene_plan_id"]

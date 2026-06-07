@@ -9,6 +9,7 @@ import {
   createFeedbackPlan,
   createExport,
   createProject,
+  createScenePlanConfirmationGuidance,
   downloadExportFile,
   generateScenePlan,
   generateScript,
@@ -619,6 +620,12 @@ export default function App({ initialYaml }: AppProps) {
         setScenePlanConfirmed(current.confirmed);
         setActiveProjectPatch({ stage: "scene_plan_draft" });
         setViewMode("scene-plan");
+        if (!current.confirmed) {
+          const guidance = await createScenePlanConfirmationGuidance(activeProject.project_id).catch(() => null);
+          if (guidance?.assistant_message) {
+            setMessages((items) => mergeConversationMessages(items, [guidance.assistant_message]));
+          }
+        }
         return;
       }
       const current = createDemoScenePlan(chapters);

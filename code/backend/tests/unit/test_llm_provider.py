@@ -1,10 +1,13 @@
 import json
+import http.client
+from urllib import request
 
 from app.core.config import Settings
 from app.services.llm_provider import (
     LLMRequest,
     OpenAICompatibleLLMProvider,
     StubLLMProvider,
+    _default_openai_transport,
     provider_from_settings,
 )
 
@@ -65,6 +68,30 @@ def test_openai_compatible_provider_requires_api_key():
         assert "OPENAI_API_KEY" in str(exc)
     else:
         raise AssertionError("Expected missing API key to raise RuntimeError")
+
+
+def test_openai_compatible_provider_wraps_incomplete_read():
+    class IncompleteResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return None
+
+        def read(self):
+            raise http.client.IncompleteRead(b'{"choices": [')
+
+    original_urlopen = request.urlopen
+    request.urlopen = lambda http_request, timeout: IncompleteResponse()
+    try:
+        _default_openai_transport("https://llm.example.test/v1/chat/completions", {}, {"model": "gpt-test"})
+    except RuntimeError as exc:
+        assert "response read failed" in str(exc)
+        assert "IncompleteRead" in str(exc)
+    else:
+        raise AssertionError("Expected incomplete read to raise RuntimeError")
+    finally:
+        request.urlopen = original_urlopen
 
 
 def test_provider_from_settings_uses_openai_configuration():

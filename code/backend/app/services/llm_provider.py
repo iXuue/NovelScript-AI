@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import http.client
 import json
 from typing import Any, Callable
 from urllib import error, request
@@ -54,6 +55,8 @@ def _default_openai_transport(url: str, headers: dict[str, str], payload: dict[s
         raise RuntimeError(f"OpenAI-compatible provider request failed: {exc.code} {response_body}") from exc
     except error.URLError as exc:
         raise RuntimeError(f"OpenAI-compatible provider request failed: {exc.reason}") from exc
+    except (http.client.IncompleteRead, TimeoutError, ConnectionError) as exc:
+        raise RuntimeError(f"OpenAI-compatible provider response read failed: {exc}") from exc
 
     try:
         return json.loads(response_body)
