@@ -23,6 +23,7 @@ type Props = {
   onSelectScene: (sceneId: string) => void;
   onSelectView: (view: ViewMode) => void;
   onSelectProject: (projectId: string) => void;
+  onDeleteProjects: (projectIds: string[]) => void;
   onNewProject: () => void;
   onLogout: () => void;
 };
@@ -41,6 +42,7 @@ function LegacyProjectSidebar({
   viewMode,
   onNewProject,
   onSelectProject,
+  onDeleteProjects,
   onSelectView,
   onToggleCollapsed
 }: Props) {
@@ -122,11 +124,15 @@ export function ProjectSidebar({
   onNewProjectNameChange,
   onLogout,
   onSelectProject,
+  onDeleteProjects,
   onSelectScene,
   onSelectView,
   onToggleCollapsed
 }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
   const [scenePlanOpen, setScenePlanOpen] = useState(false);
   const hasScenePlanScenes = Boolean(scenePlan?.scenes.length);
@@ -136,6 +142,36 @@ export function ProjectSidebar({
     if (!canCreateProject || loading) return;
     onNewProject();
     setCreateOpen(false);
+  }
+
+  function enterDeleteMode() {
+    setDeleteMode(true);
+    setSelectedIds(new Set());
+  }
+
+  function exitDeleteMode() {
+    setDeleteMode(false);
+    setSelectedIds(new Set());
+    setDeleteConfirmOpen(false);
+  }
+
+  function toggleSelect(projectId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  }
+
+  function handleBatchDelete() {
+    if (selectedIds.size === 0) return;
+    setDeleteConfirmOpen(true);
+  }
+
+  function confirmDelete() {
+    onDeleteProjects(Array.from(selectedIds));
+    exitDeleteMode();
   }
 
   function handleCreateCancel() {
@@ -165,18 +201,54 @@ export function ProjectSidebar({
             </section>
           ) : null}
 
-          <section className="figma-sidebar-section">
-            <div className="figma-section-row">
-              <div className="figma-section-label">项目</div>
-              <button
-                aria-label="新建项目"
-                className="figma-add-project-button"
-                disabled={loading}
-                type="button"
-                onClick={() => setCreateOpen(true)}
-              >
-                +
-              </button>
+          <div className="figma-sidebar-projects">
+            <section className="figma-sidebar-section">
+              <div className="figma-section-row">
+                <div className="figma-section-label">项目</div>
+                <div className="figma-section-actions">
+                {deleteMode ? (
+                  <>
+                    <button
+                      aria-label="删除选中项目"
+                      className="figma-section-action danger"
+                      disabled={selectedIds.size === 0}
+                      type="button"
+                      onClick={handleBatchDelete}
+                    >
+                      删除
+                    </button>
+                    <button
+                      aria-label="完成删除"
+                      className="figma-section-action"
+                      type="button"
+                      onClick={exitDeleteMode}
+                    >
+                      完成
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      aria-label="新建项目"
+                      className="figma-section-action icon"
+                      disabled={loading}
+                      type="button"
+                      onClick={() => setCreateOpen(true)}
+                    >
+                      +
+                    </button>
+                    <button
+                      aria-label="删除项目"
+                      className="figma-section-action icon"
+                      disabled={loading}
+                      type="button"
+                      onClick={enterDeleteMode}
+                    >
+                      -
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             <div className="figma-project-list">
               {projects.length > 0 ? (
@@ -186,14 +258,21 @@ export function ProjectSidebar({
                       className={project.project_id === currentProject?.project_id ? "figma-nav-item active" : "figma-nav-item"}
                       type="button"
                       onClick={() => {
-                        onSelectProject(project.project_id);
-                        setExpandedProjectId((value) => (value === project.project_id ? null : project.project_id));
+                        if (deleteMode) {
+                          toggleSelect(project.project_id);
+                        } else {
+                          onSelectProject(project.project_id);
+                          setExpandedProjectId((value) => (value === project.project_id ? null : project.project_id));
+                        }
                       }}
                     >
+                      {deleteMode ? (
+                        <span className={`figma-checkbox ${selectedIds.has(project.project_id) ? "checked" : ""}`} aria-hidden="true" />
+                      ) : null}
                       <span>{project.name}</span>
-                      <DisclosureChevron open={expandedProjectId === project.project_id} />
+                      {!deleteMode ? <DisclosureChevron open={expandedProjectId === project.project_id} /> : null}
                     </button>
-                    {expandedProjectId === project.project_id ? (
+                    {!deleteMode && expandedProjectId === project.project_id ? (
                       <div className="figma-project-thread-preview">暂无对话</div>
                     ) : null}
                   </div>
@@ -201,6 +280,29 @@ export function ProjectSidebar({
               ) : null}
             </div>
           </section>
+          </div>
+
+          {deleteConfirmOpen ? (
+            <div className="figma-project-modal-scrim" role="presentation">
+              <section aria-labelledby="delete-confirm-title" aria-modal="true" className="figma-project-modal" role="dialog">
+                <header className="figma-project-modal-header">
+                  <h2 id="delete-confirm-title">确认删除</h2>
+                  <button aria-label="取消" className="figma-style-close" type="button" onClick={() => setDeleteConfirmOpen(false)}>
+                    ×
+                  </button>
+                </header>
+                <p>确定要删除选中的 {selectedIds.size} 个项目吗？此操作不可撤销。</p>
+                <footer className="figma-project-modal-actions">
+                  <button className="figma-secondary" type="button" onClick={() => setDeleteConfirmOpen(false)}>
+                    取消
+                  </button>
+                  <button className="figma-primary figma-danger" type="button" onClick={confirmDelete}>
+                    确认删除
+                  </button>
+                </footer>
+              </section>
+            </div>
+          ) : null}
 
           {createOpen ? (
             <div className="figma-project-modal-scrim" role="presentation">

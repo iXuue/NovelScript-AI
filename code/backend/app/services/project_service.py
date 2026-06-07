@@ -107,6 +107,19 @@ def update_project_stage(project_id: str, stage: ProjectStage) -> dict:
     return project
 
 
+def delete_project(project_id: str, db=None, user_id: str | None = None) -> None:
+    if db is not None:
+        project = db.get(Project, project_id)
+        if project is None:
+            raise KeyError(project_id)
+        if user_id is not None and project.user_id != user_id:
+            raise PermissionError("not_owner")
+        db.delete(project)
+        db.commit()
+    STORE.projects.pop(project_id, None)
+    STORE.conversations.pop(project_id, None)
+
+
 def update_project_stage_in_db(db, project_id: str, stage: ProjectStage) -> None:
     if db is None:
         return

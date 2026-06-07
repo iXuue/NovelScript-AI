@@ -1,8 +1,8 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 
 import type { AgentProgress as AgentProgressType, ChapterDraft, ConversationMessage, FeedbackPlan, StyleSource, UiMode } from "../types";
-import { AgentProgress } from "./AgentProgress";
 import { ChapterConfirmation } from "./ChapterConfirmation";
+import { StageProgress } from "./StageProgress";
 import { StyleSourceSelector } from "./StyleSourceSelector";
 
 type Props = {
@@ -26,6 +26,7 @@ type Props = {
   loading: boolean;
   activeLabel: string | null;
   progress: AgentProgressType | null;
+  projectSteps: Array<{ step_type: string; status: string; summary: string }>;
   onStyleChange: (source: StyleSource | null) => void;
   onStyleReferenceSelected: (file: File) => void;
   onNovelSelected: (file: File) => void;
@@ -49,6 +50,7 @@ export function ConversationPane({
   loading,
   activeLabel,
   progress,
+  projectSteps,
   messages,
   pendingFeedbackPlan,
   feedbackChapterOptions = [],
@@ -164,9 +166,14 @@ export function ConversationPane({
         ) : null}
       </div>
 
-      {(activeLabel || progress?.status === "queued" || progress?.status === "running") ? (
-        <AgentProgress activeLabel={activeLabel} progress={progress} />
-      ) : null}
+      <StageProgress
+        activeLabel={activeLabel}
+        progress={progress}
+        projectSteps={projectSteps}
+        hasNovelUpload={hasNovelUpload}
+        styleSelected={Boolean(selectedStyle)}
+        chaptersConfirmed={chaptersConfirmed}
+      />
 
       <form className="figma-composer" onSubmit={handleSubmit}>
         <div className="figma-composer-field">

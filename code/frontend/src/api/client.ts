@@ -100,6 +100,10 @@ export async function createProject(name: string): Promise<ProjectSummary> {
   return requestJson<ProjectSummary>("/projects", { method: "POST", body: JSON.stringify({ name }) });
 }
 
+export async function deleteProject(projectId: string): Promise<void> {
+  return requestJson<void>(`/projects/${projectId}`, { method: "DELETE" });
+}
+
 export async function listProjects(): Promise<ProjectSummary[]> {
   return requestJson<ProjectSummary[]>("/projects");
 }
@@ -292,4 +296,14 @@ export function getExportDownloadUrl(downloadUrl: string): string {
 
 export async function getActiveRun(projectId: string): Promise<AgentProgress | null> {
   return requestJson<AgentProgress | null>(`/projects/${projectId}/runs/active`);
+}
+
+export type ProjectProgressStep = {
+  step_type: string;
+  status: string;
+  summary: string;
+};
+
+export async function getProjectProgress(projectId: string): Promise<{ steps: ProjectProgressStep[] }> {
+  return requestJson<{ steps: ProjectProgressStep[] }>(`/projects/${projectId}/progress`);
 }

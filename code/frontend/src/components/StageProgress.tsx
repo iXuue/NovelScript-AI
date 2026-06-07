@@ -1,57 +1,115 @@
-const STAGES = ["章节摘要", "风格解析", "场景规划", "剧本生成", "剧本修改"] as const;
+import { useState } from "react";
+import type { AgentProgress as AgentProgressType } from "../types";
+import type { ProjectProgressStep } from "../api/client";
 
-type StageName = (typeof STAGES)[number];
+const STAGES = [
+  "上传文件",
+  "风格确认",
+  "段落确认",
+  "章节摘要",
+  "风格解析",
+  "场景规划",
+  "剧本生成",
+  "剧本修改",
+] as const;
 
-/** loadingLabel → 当前所在阶段 */
-const LABEL_TO_STAGE: Record<string, StageName> = {
-  "正在解析上传文件": "章节摘要",
-  "正在确认章节": "章节摘要",
-  "正在生成场景规划": "场景规划",
-  "正在确认场景规划": "场景规划",
-  "正在保存风格设计": "风格解析",
-  "正在上传风格参考": "风格解析",
-  "正在逐场生成剧本": "剧本生成",
-  "正在生成修改计划": "剧本修改",
-  "正在执行修改计划": "剧本修改",
-  "正在修复场景规划": "场景规划",
-  "正在修复剧本场景": "剧本生成",
+const STEP_TO_STAGE: Record<string, string> = {
+  chapter_summary: "章节摘要",
+  chapter_summaries: "章节摘要",
+  style_profile: "风格解析",
+  scene_plan: "场景规划",
+  script_generation: "剧本生成",
+  feedback_plan: "剧本修改",
 };
 
 type Props = {
   activeLabel: string | null;
+  progress: AgentProgressType | null;
+  projectSteps: ProjectProgressStep[];
+  hasNovelUpload: boolean;
+  styleSelected: boolean;
+  chaptersConfirmed: boolean;
 };
 
-export function StageProgress({ activeLabel }: Props) {
-  const currentStage = activeLabel ? LABEL_TO_STAGE[activeLabel] ?? null : null;
-  if (!currentStage) return null;
+export function StageProgress({
+  activeLabel,
+  progress,
+  projectSteps = [],
+  hasNovelUpload,
+  styleSelected,
+  chaptersConfirmed,
+}: Props) {
+  const [open, setOpen] = useState(false);
 
-  const currentIndex = STAGES.indexOf(currentStage);
+  const stageStatus: Record<string, "running" | "done" | "pending"> = {};
+  for (const stage of STAGES) stageStatus[stage] = "pending";
+
+  // 用户操作驱动
+  if (hasNovelUpload) stageStatus["上传文件"] = "done";
+  if (styleSelected) stageStatus["风格确认"] = "done";
+  if (chaptersConfirmed) stageStatus["段落确认"] = "done";
+
+  // 持久化步骤：标记历史完成的阶段
+  for (const step of projectSteps) {
+    const stage = STEP_TO_STAGE[step.step_type];
+    if (!stage) continue;
+    if (step.status === "succeeded" && stageStatus[stage] !== "running") {
+      stageStatus[stage] = "done";
+    }
+  }
+
+  // 活跃 run 的步骤：标记正在运行的阶段
+  const activeSteps = progress?.steps ?? [];
+  for (const step of activeSteps) {
+    const stage = STEP_TO_STAGE[step.step_type];
+    if (!stage) continue;
+    if (step.status === "running") {
+      stageStatus[stage] = "running";
+    }
+  }
+
+  // 首次点击生成到首次轮询之间的间隙：用 activeLabel 立即反馈
+  if (activeSteps.length === 0 && projectSteps.length === 0 && activeLabel) {
+    const fallbackMap: Record<string, string> = {
+      "正在生成场景计划": "场景规划",
+      "正在逐场生成剧本": "剧本生成",
+      "正在执行修改计划": "剧本修改",
+      "正在修复场景规划": "场景规划",
+      "正在修复剧本场景": "剧本生成",
+    };
+    const current = fallbackMap[activeLabel];
+    if (current) {
+      stageStatus[current] = "running";
+    }
+  }
+
+  const hasRunning = Object.values(stageStatus).some((s) => s === "running");
 
   return (
-    <div className="figma-stage-progress" aria-label="生成进度">
-      {STAGES.map((stage, index) => {
-        const isCurrent = index === currentIndex;
-        const isDone = index < currentIndex;
-        const isPending = index > currentIndex;
+    <div className={`figma-stage-bottom ${open ? "open" : ""}`} aria-label="生成进度">
+      <button
+        className="figma-stage-handle"
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={open ? "收起进度" : "展开进度"}
+      >
+        <span className="figma-stage-handle-bar" aria-hidden="true" />
+      </button>
 
-        let dotClass = "figma-stage-dot";
-        if (isCurrent) dotClass += " current";
-        else if (isDone) dotClass += " done";
-        else if (isPending) dotClass += " pending";
-
-        let textClass = "figma-stage-label";
-        if (isCurrent) textClass += " current";
-        else if (isDone) textClass += " done";
-        else if (isPending) textClass += " pending";
-
-        return (
-          <span className="figma-stage-item" key={stage}>
-            <span className={dotClass} aria-hidden="true" />
-            <span className={textClass}>{stage}</span>
-            {index < STAGES.length - 1 ? <span className="figma-stage-sep" aria-hidden="true" /> : null}
-          </span>
-        );
-      })}
+      <div className="figma-stage-panel">
+        <span className="figma-stage-panel-title">
+          {hasRunning ? "正在生成" : "进度"}
+        </span>
+        {STAGES.map((stage) => {
+          const status = stageStatus[stage];
+          return (
+            <div className={`figma-stage-chip ${status}`} key={stage}>
+              <span className={`figma-stage-chip-dot ${status}`} aria-hidden="true" />
+              <span className="figma-stage-chip-label">{stage}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

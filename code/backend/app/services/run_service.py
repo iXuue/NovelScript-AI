@@ -228,6 +228,30 @@ def get_run(project_id: str, run_id: str, db=None) -> dict | None:
     return None
 
 
+def get_project_progress(project_id: str, db=None) -> list[dict]:
+    """返回该项目所有已完成的步骤（跨所有 run，每个 step_type 取最新状态）。"""
+    if db is not None:
+        steps = (
+            db.query(AgentRunStep)
+            .filter(AgentRunStep.project_id == project_id)
+            .order_by(AgentRunStep.updated_at.desc())
+            .all()
+        )
+        seen: set[str] = set()
+        latest: list[dict] = []
+        for step in steps:
+            if step.step_type in seen:
+                continue
+            seen.add(step.step_type)
+            latest.append({
+                "step_type": step.step_type,
+                "status": step.status,
+                "summary": step.summary,
+            })
+        return latest
+    return []
+
+
 def get_active_run(project_id: str, db=None) -> dict | None:
     if db is not None:
         run = (

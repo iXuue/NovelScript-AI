@@ -10,10 +10,12 @@ import {
   createExport,
   createProject,
   downloadExportFile,
+  deleteProject,
   generateScenePlan,
   generateScript,
   getActiveRun,
   getCurrentUser,
+  getProjectProgress,
   getCurrentScriptForUi,
   getPendingChapters,
   getPrimaryMessages,
@@ -250,6 +252,7 @@ export default function App({ initialYaml }: AppProps) {
   const [feedbackTargetMode, setFeedbackTargetMode] = useState<FeedbackTargetMode>("script");
   const [selectedFeedbackChapterIds, setSelectedFeedbackChapterIds] = useState<string[]>([]);
   const [progress, setProgress] = useState<AgentProgress | null>(null);
+  const [projectSteps, setProjectSteps] = useState<Array<{ step_type: string; status: string; summary: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [loadingLabel, setLoadingLabel] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>("正在连接后端服务。");
@@ -390,6 +393,9 @@ export default function App({ initialYaml }: AppProps) {
       getActiveRun(activeProject.project_id)
         .then(setProgress)
         .catch(() => undefined);
+      getProjectProgress(activeProject.project_id)
+        .then((payload) => setProjectSteps(payload.steps))
+        .catch(() => undefined);
     }, 1800);
     return () => window.clearInterval(timer);
   }, [activeProject, mode]);
@@ -517,6 +523,22 @@ export default function App({ initialYaml }: AppProps) {
     setActiveProjectId(project.project_id);
     resetArtifactsForProject();
     setStatusMessage("后端未连接。");
+  }
+
+  function handleDeleteProjects(projectIds: string[]) {
+    void runAction("正在删除项目", async () => {
+      for (const projectId of projectIds) {
+        if (mode === "live") {
+          await deleteProject(projectId).catch(() => undefined);
+        }
+      }
+      const idSet = new Set(projectIds);
+      setProjects((items) => items.filter((p) => !idSet.has(p.project_id)));
+      if (activeProjectId && idSet.has(activeProjectId)) {
+        setActiveProjectId(null);
+        resetArtifactsForProject();
+      }
+    });
   }
 
   function handleNewProject() {
@@ -968,6 +990,7 @@ export default function App({ initialYaml }: AppProps) {
             setActiveProjectId(projectId);
             resetArtifactsForProject();
           }}
+          onDeleteProjects={handleDeleteProjects}
           onSelectScene={handleSelectScene}
           onSelectView={handleSelectView}
           onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
@@ -983,6 +1006,7 @@ export default function App({ initialYaml }: AppProps) {
             loading={loading}
             activeLabel={loadingLabel}
             progress={progress}
+            projectSteps={projectSteps}
             messages={messages}
             pendingFeedbackPlan={pendingFeedbackPlan}
             feedbackChapterOptions={feedbackChapterOptions}

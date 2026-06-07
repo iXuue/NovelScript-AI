@@ -7,7 +7,7 @@ from app.api.errors import api_error
 from app.core.database import get_db
 from app.models.user import User
 from app.services.local_snapshot_service import mirror_project_snapshot
-from app.services.project_service import create_project, get_project, list_projects
+from app.services.project_service import create_project, delete_project, get_project, list_projects
 
 router = APIRouter()
 
@@ -30,6 +30,20 @@ def create_project_endpoint(
 @router.get("/projects")
 def list_projects_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return list_projects(db, current_user.user_id)
+
+
+@router.delete("/projects/{project_id}", status_code=204)
+def delete_project_endpoint(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        delete_project(project_id, db, current_user.user_id)
+    except KeyError:
+        raise api_error(404, "project_not_found", "Project not found")
+    except PermissionError:
+        raise api_error(403, "not_owner", "Cannot delete another user's project")
 
 
 @router.get("/projects/{project_id}")
