@@ -115,4 +115,6 @@ Exports:
 - `doc`
 - `pdf`
 
+`docx`, `doc`, and `pdf` are generated as readable script documents with Chinese labels. Dialogue blocks use `speaker: line` style rendered with the Chinese colon, for example `林雨：我回来了。`; non-dialogue blocks use `type: text`, for example `动作：她推开门。`. `yaml`, `markdown`, `txt`, and `clean_json` keep the structured text export format.
+
 PDF upload extracts embedded text. Scanned image-only PDFs may not contain usable text unless OCR is performed before upload.

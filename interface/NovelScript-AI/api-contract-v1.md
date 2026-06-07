@@ -825,8 +825,8 @@ Rules:
 Export reads current internal JSON from PostgreSQL.
 Export removes content_block_id, source evidence IDs, paragraph IDs, and traceability_index.
 yaml, markdown, and txt exports serialize the current script as YAML-format content for the MVP.
-docx exports a generated Word document.
-doc and pdf exports are generated from the docx export through LibreOffice.
+docx exports a readable Word script document with Chinese labels. Dialogue blocks render as `speaker：line`, for example `林雨：我回来了。`; non-dialogue blocks render as `type：text`, for example `动作：她推开门。`.
+doc and pdf exports are generated from the labeled docx export through LibreOffice and therefore follow the same readable format.
 clean_json exports the cleaned script JSON without traceability-only fields.
 Export run uses 0 LLM calls.
 ```

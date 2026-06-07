@@ -1,3 +1,7 @@
+from io import BytesIO
+
+from docx import Document
+
 from app.core.database import get_db
 from app.models.export import ExportJob
 from app.services.document_conversion_service import DocumentConverterUnavailableError
@@ -10,6 +14,11 @@ def _fake_convert_document(content: bytes, source_suffix: str, target_suffix: st
     if target_suffix == ".pdf":
         return b"%PDF-FAKE"
     return content
+
+
+def _docx_text(content: bytes) -> str:
+    document = Document(BytesIO(content))
+    return "\n".join(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
 
 
 def _prepare_script(client) -> str:
@@ -75,6 +84,14 @@ def test_export_docx_produces_real_docx_file(client):
     assert downloaded.status_code == 200
     assert downloaded.content.startswith(b"PK")
     assert downloaded.headers["content-type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    text = _docx_text(downloaded.content)
+    assert "场景编号：S001" in text
+    assert "场景信息：EXT / Old house gate / Night" in text
+    assert "出场人物：She" in text
+    assert "场景目的：Establish the protagonist's return" in text
+    assert "核心冲突：Whether she enters the old house" in text
+    assert "动作：She stands outside the old house gate." in text
+    assert "旁白：Rain presses down on her breath." in text
 
     db_gen = client.app.dependency_overrides[get_db]()
     db = next(db_gen)

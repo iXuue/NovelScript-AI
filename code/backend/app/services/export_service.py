@@ -33,6 +33,19 @@ EXPORT_CONTENT_TYPES = {
     "txt": "text/plain; charset=utf-8",
     "clean_json": "application/json; charset=utf-8",
 }
+BLOCK_TYPE_LABELS = {
+    "action": "动作",
+    "dialogue": "对白",
+    "narration": "旁白",
+    "transition": "转场",
+    "note": "备注",
+    "parenthetical": "表演提示",
+    "voiceover": "画外音",
+    "description": "描述",
+    "sound": "声音",
+    "character": "人物",
+    "shot": "镜头",
+}
 
 
 def _remove_internal(value):
@@ -76,16 +89,62 @@ def _serialize_docx(clean: dict) -> bytes:
     document.add_heading(str(clean.get("title") or "Script"), level=1)
     for scene in clean.get("scenes") or []:
         document.add_heading(str(scene.get("title") or scene.get("scene_id") or "Scene"), level=2)
-        scene_info = scene.get("scene_info")
-        if scene_info:
-            document.add_paragraph(str(scene_info))
+        for line in _format_scene_metadata(scene):
+            document.add_paragraph(line)
         for block in scene.get("content_blocks") or []:
-            speaker = block.get("speaker")
-            text = block.get("text")
-            if speaker:
-                document.add_paragraph(str(speaker))
-            if text:
-                document.add_paragraph(str(text))
+            line = _format_content_block(block)
+            if line:
+                document.add_paragraph(line)
     buffer = BytesIO()
     document.save(buffer)
     return buffer.getvalue()
+
+
+def _format_scene_metadata(scene: dict) -> list[str]:
+    lines = [
+        f"场景编号：{_string_value(scene.get('scene_id')) or '待定'}",
+        f"标题：{_string_value(scene.get('title')) or '待定'}",
+    ]
+    scene_info = _string_value(scene.get("scene_info"))
+    if scene_info:
+        lines.append(f"场景信息：{scene_info}")
+    characters = _join_values(scene.get("characters"))
+    if characters:
+        lines.append(f"出场人物：{characters}")
+    scene_purpose = _string_value(scene.get("scene_purpose"))
+    if scene_purpose:
+        lines.append(f"场景目的：{scene_purpose}")
+    core_conflict = _string_value(scene.get("core_conflict"))
+    if core_conflict:
+        lines.append(f"核心冲突：{core_conflict}")
+    return lines
+
+
+def _format_content_block(block: dict) -> str | None:
+    text = _string_value(block.get("text"))
+    if not text:
+        return None
+
+    block_type = _string_value(block.get("type") or block.get("block_type"))
+    if block_type == "dialogue":
+        speaker = _string_value(block.get("speaker")) or "未指定角色"
+        return f"{speaker}：{text}"
+
+    label = _block_type_label(block_type)
+    return f"{label}：{text}"
+
+
+def _block_type_label(block_type: str) -> str:
+    return BLOCK_TYPE_LABELS.get(block_type, block_type or "内容")
+
+
+def _join_values(value) -> str:
+    if not isinstance(value, list):
+        return ""
+    return "、".join(str(item).strip() for item in value if str(item).strip())
+
+
+def _string_value(value) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
