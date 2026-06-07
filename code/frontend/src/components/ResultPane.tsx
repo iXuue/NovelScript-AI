@@ -1,8 +1,7 @@
 import { useState } from "react";
 
 import previewEmptyArt from "../assets/coda-reading-book-3x.webp";
-import type { AgentProgress as AgentProgressType, EvidenceLookupResult, ExportFormat, ExportResult, ScenePlan, ScriptCurrentForUi } from "../types";
-import { AgentProgress } from "./AgentProgress";
+import type { EvidenceLookupResult, ExportFormat, ExportResult, ScenePlan, ScriptCurrentForUi } from "../types";
 import { EvidenceModal } from "./EvidenceModal";
 import { ExportMenu } from "./ExportMenu";
 import { ScriptPreviewPanel } from "./ScriptPreviewPanel";
@@ -20,8 +19,6 @@ type Props = {
   scenePlanConfirmed: boolean;
   loading: boolean;
   fallbackEvidence: Record<string, EvidenceLookupResult>;
-  progress: AgentProgressType | null;
-  activeLabel: string | null;
   onExport: (format: ExportFormat) => void;
   onConfirmScenePlan: () => void;
   onGenerateScenePlan: () => void;
@@ -31,13 +28,11 @@ type Props = {
 };
 
 export function ResultPane({
-  activeLabel,
   failedStage,
   fallbackEvidence,
   latestExport,
   loading,
   projectId,
-  progress,
   scenePlan,
   scenePlanConfirmed,
   scriptForUi,
@@ -55,7 +50,6 @@ export function ResultPane({
   void onRepairScenePlan;
   void onRepairScriptScene;
 
-  const showAgentProgress = Boolean(activeLabel) || progress?.status === "queued" || progress?.status === "running";
   const hasScript = Boolean(scriptForUi || yaml);
 
   return (
@@ -156,8 +150,6 @@ export function ResultPane({
           </section>
         ) : null}
       </div>
-
-      {showAgentProgress ? <AgentProgress activeLabel={activeLabel} progress={progress} /> : null}
 
       {evidenceBlockId ? (
         <EvidenceModal
