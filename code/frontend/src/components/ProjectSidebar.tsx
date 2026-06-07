@@ -190,8 +190,8 @@ export function ProjectSidebar({
             <div className="figma-brand-title">NovelScript AI</div>
           </div>
         ) : null}
-        <button className="figma-icon-button" type="button" onClick={onToggleCollapsed}>
-          {collapsed ? "展开" : "收起"}
+        <button className="figma-icon-button" type="button" onClick={onToggleCollapsed} aria-label={collapsed ? "展开侧栏" : "收起侧栏"}>
+          {collapsed ? "▶" : "◀"}
         </button>
       </div>
 
