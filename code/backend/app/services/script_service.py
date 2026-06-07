@@ -16,6 +16,8 @@ from app.services.export_service import to_yaml_preview
 from app.services.llm_provider import LLMProvider
 from app.services.project_service import update_project_stage, update_project_stage_in_db
 from app.services.source_id_service import normalize_paragraph_ids
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from app.services.store import STORE, now_utc, persistent_id
 
 
@@ -42,14 +44,14 @@ def generate_script_from_confirmed_scene_plan(
     scenes = sorted(scene_plan.scenes, key=lambda scene: scene.order)
     generated_scenes = []
     model_names = []
-    for scene in scenes:
-        relevant_paragraphs = _source_paragraphs_for_scene(scene, paragraphs_by_id)
+
+    def _generate_one_scene(scene, relevant_paragraphs):
         response = generate_with_context_log(
             llm_provider,
             task_type="script_generation",
             prompt=_script_scene_prompt(scene, relevant_paragraphs, style_profile, feedback_plan=feedback_plan),
             response_format="json",
-            db=db,
+            db=None,
             project_id=project_id,
             run_id=run_id,
             step_type="script_generation",
@@ -57,6 +59,20 @@ def generate_script_from_confirmed_scene_plan(
             source_item_count=len(relevant_paragraphs),
             included_item_count=len(relevant_paragraphs),
         )
+        return scene, response
+
+    scene_results: dict[str, tuple] = {}
+    with ThreadPoolExecutor(max_workers=min(8, len(scenes))) as executor:
+        futures = {
+            executor.submit(_generate_one_scene, scene, _source_paragraphs_for_scene(scene, paragraphs_by_id)): scene.scene_id
+            for scene in scenes
+        }
+        for future in as_completed(futures):
+            scene, response = future.result()
+            scene_results[scene.scene_id] = (scene, response)
+
+    for scene in scenes:
+        _, response = scene_results[scene.scene_id]
         model_names.append(response.model_name)
         generated_scenes.append(
             _validate_script_scene_payload(
