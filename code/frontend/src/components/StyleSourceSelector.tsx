@@ -79,7 +79,7 @@ export function StyleSourceSelector({ locked, loading, selected, onChange, onRef
 
   return (
     <section className="figma-style-source" aria-label="风格设计">
-      <button className="figma-style-trigger" type="button" disabled={loading} onClick={() => setModalOpen(true)}>
+      <button className="figma-style-trigger figma-composer-control-button" type="button" disabled={loading} onClick={() => setModalOpen(true)}>
         <div className="figma-style-summary">
           <h2>{selectedLabel}</h2>
         </div>

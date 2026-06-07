@@ -275,6 +275,7 @@ test("App triggers scene plan generation, confirmation, script generation, and e
   await screen.findByText(/title: Interface project/);
   await screen.findByText("Lin stands at the door.");
   await screen.findByText(/scenes:\s\[\]/);
+  fireEvent.click(screen.getByRole("button", { name: /修改目标/ }));
   expect(screen.getByLabelText("全部章节")).toBeChecked();
   fireEvent.click(screen.getByLabelText("剧本章节：CH001"));
   fireEvent.change(screen.getByLabelText("对话输入"), { target: { value: "让第一章更克制" } });

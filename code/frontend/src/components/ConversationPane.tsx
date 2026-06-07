@@ -65,11 +65,13 @@ export function ConversationPane({
   onSubmitMessage
 }: Props) {
   const [draft, setDraft] = useState("");
+  const [feedbackTargetOpen, setFeedbackTargetOpen] = useState(false);
   const needsSetup = !hasNovelUpload || !selectedStyle;
   const showSetupHint = needsSetup && messages.length === 0;
   const showGenerateAction = canGenerateScenePlan || canGenerateScript;
   const generateLabel = canGenerateScenePlan ? "开始生成 Scene Plan" : "开始生成剧本";
   const handleGenerate = canGenerateScenePlan ? onGenerateScenePlan : onGenerateScript;
+  const feedbackTargetSummary = selectedFeedbackChapterIds.length > 0 ? `已选 ${selectedFeedbackChapterIds.length} 章` : "全部章节";
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -169,7 +171,7 @@ export function ConversationPane({
           />
           <div className="figma-composer-actions">
             <div className="figma-composer-tools">
-              <label className="figma-attachment-icon figma-composer-tool-button" title="上传文档">
+              <label className="figma-attachment-icon figma-composer-tool-button figma-composer-control-button" title="上传文档">
                 <span aria-hidden="true">+</span>
                 <strong>上传文档</strong>
                 <input aria-label="上传小说附件" disabled={loading} type="file" accept=".md,.txt,.docx,.pdf" onChange={handleFileChange} />
@@ -183,7 +185,21 @@ export function ConversationPane({
               />
               {uploadedNovelName ? <span className="figma-uploaded-name">{uploadedNovelName}</span> : null}
               {feedbackChapterOptions.length > 0 ? (
-                <fieldset className="figma-feedback-target" aria-label="修改目标">
+                <div className="figma-feedback-target-menu">
+                  <button
+                    aria-controls="feedback-target-popover"
+                    aria-expanded={feedbackTargetOpen}
+                    className="figma-feedback-target-trigger figma-composer-control-button"
+                    disabled={loading}
+                    type="button"
+                    onClick={() => setFeedbackTargetOpen((value) => !value)}
+                  >
+                    <strong>修改目标</strong>
+                    <span className="figma-feedback-target-summary">{feedbackTargetSummary}</span>
+                    <span className="figma-feedback-target-chevron" aria-hidden="true" />
+                  </button>
+                  {feedbackTargetOpen ? (
+                    <fieldset className="figma-feedback-target-popover" id="feedback-target-popover" aria-label="修改目标选项">
                   <legend>修改目标</legend>
                   <label className="figma-feedback-target-choice">
                     <input
@@ -211,7 +227,9 @@ export function ConversationPane({
                       ))}
                     </div>
                   </div>
-                </fieldset>
+                    </fieldset>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <div className="figma-composer-main-actions">
