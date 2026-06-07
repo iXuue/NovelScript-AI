@@ -4,6 +4,8 @@ import json
 
 import yaml
 
+from app.services.document_conversion_service import convert_document
+
 
 INTERNAL_KEYS = {
     "content_block_id",
@@ -16,6 +18,7 @@ INTERNAL_KEYS = {
 EXPORT_EXTENSIONS = {
     "yaml": "yaml",
     "markdown": "md",
+    "doc": "doc",
     "docx": "docx",
     "pdf": "pdf",
     "txt": "txt",
@@ -24,6 +27,7 @@ EXPORT_EXTENSIONS = {
 EXPORT_CONTENT_TYPES = {
     "yaml": "application/x-yaml; charset=utf-8",
     "markdown": "text/markdown; charset=utf-8",
+    "doc": "application/msword",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "pdf": "application/pdf",
     "txt": "text/plain; charset=utf-8",
@@ -58,8 +62,10 @@ def serialize_export(internal: dict, export_format: str) -> str | bytes:
         return to_yaml_preview(clean)
     if export_format == "docx":
         return _serialize_docx(clean)
+    if export_format == "doc":
+        return convert_document(_serialize_docx(clean), ".docx", ".doc")
     if export_format == "pdf":
-        raise ValueError("pdf_not_available")
+        return convert_document(_serialize_docx(clean), ".docx", ".pdf")
     raise ValueError(f"unsupported export format: {export_format}")
 
 

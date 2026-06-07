@@ -22,7 +22,7 @@ def create_export_job(db, project_id: str, export_format: str) -> dict:
         target_dir = Path("data") / "exports" / project_id
         target_dir.mkdir(parents=True, exist_ok=True)
         file_path = target_dir / f"{export_id}-{filename}"
-        _write_text_file(file_path, content)
+        _write_export_file(file_path, content)
         result = {
             "export_id": export_id,
             "format": export_format,
@@ -30,6 +30,7 @@ def create_export_job(db, project_id: str, export_format: str) -> dict:
             "filename": filename,
             "download_url": f"/projects/{project_id}/exports/{export_id}",
             "file_path": str(file_path),
+            "content_type": EXPORT_CONTENT_TYPES[export_format],
         }
         STORE.exports[export_id] = result
         return result

@@ -9,12 +9,12 @@ import {
   createFeedbackPlan,
   createExport,
   createProject,
+  downloadExportFile,
   generateScenePlan,
   generateScript,
   getActiveRun,
   getCurrentUser,
   getCurrentScriptForUi,
-  getExportDownloadUrl,
   getPendingChapters,
   getPrimaryMessages,
   getScenePlan,
@@ -196,6 +196,17 @@ async function optionalResource<T>(loader: () => Promise<T>): Promise<T | null> 
 
 function isApiErrorCode(error: unknown, code: string): boolean {
   return error instanceof ApiRequestError && error.code === code;
+}
+
+function triggerBrowserDownload(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
 }
 
 export default function App({ initialYaml }: AppProps) {
@@ -809,8 +820,9 @@ export default function App({ initialYaml }: AppProps) {
     void runAction("正在导出", async () => {
       if (mode === "live") {
         const exported = await createExport(activeProject.project_id, format);
+        const blob = await downloadExportFile(exported.download_url);
         setLatestExport(exported);
-        window.open(getExportDownloadUrl(exported.download_url), "_blank", "noopener,noreferrer");
+        triggerBrowserDownload(blob, exported.filename ?? `script.${format}`);
         return;
       }
       setLatestExport({

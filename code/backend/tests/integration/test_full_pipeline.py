@@ -30,7 +30,16 @@ She packs every clue into her bag.
 """
 
 
-def _full_pipeline(client, style_kind="builtin", style_value="suspense"):
+def _fake_convert_document(content: bytes, source_suffix: str, target_suffix: str) -> bytes:
+    if target_suffix == ".doc":
+        return b"DOC_BYTES"
+    if target_suffix == ".pdf":
+        return b"%PDF-FAKE"
+    return content
+
+
+def _full_pipeline(client, monkeypatch, style_kind="builtin", style_value="suspense"):
+    monkeypatch.setattr("app.services.export_service.convert_document", _fake_convert_document)
     project = client.post("/projects", json={"name": "Rainy Return"}).json()
     project_id = project["project_id"]
     assert project["stage"] == "empty"
@@ -72,7 +81,7 @@ def _full_pipeline(client, style_kind="builtin", style_value="suspense"):
     assert current.json()["status"] == "current"
 
     exports = {}
-    for fmt in ["yaml", "markdown", "txt", "docx", "clean_json"]:
+    for fmt in ["yaml", "markdown", "txt", "docx", "doc", "pdf", "clean_json"]:
         created = client.post(f"/projects/{project_id}/exports", json={"format": fmt})
         assert created.status_code == 200, f"export {fmt} failed"
         exports[fmt] = created.json()
@@ -80,20 +89,20 @@ def _full_pipeline(client, style_kind="builtin", style_value="suspense"):
         assert download.status_code == 200, f"download {fmt} failed"
         if fmt == "docx":
             assert download.content.startswith(b"PK")
+        elif fmt == "doc":
+            assert download.content == b"DOC_BYTES"
+        elif fmt == "pdf":
+            assert download.content.startswith(b"%PDF")
         else:
             assert "content_block_id" not in download.text
             assert "source_evidence_ids" not in download.text
             assert "source_paragraph_ids" not in download.text
 
-    pdf = client.post(f"/projects/{project_id}/exports", json={"format": "pdf"})
-    assert pdf.status_code == 400
-    assert pdf.json()["error"]["code"] == "pdf_not_available"
-
     return project_id, exports
 
 
-def test_full_pipeline_all_artifacts_persisted(client):
-    project_id, _exports = _full_pipeline(client)
+def test_full_pipeline_all_artifacts_persisted(client, monkeypatch):
+    project_id, _exports = _full_pipeline(client, monkeypatch)
 
     db_gen = client.app.dependency_overrides[get_db]()
     db = next(db_gen)
@@ -141,14 +150,19 @@ def test_full_pipeline_all_artifacts_persisted(client):
         assert all(validation.passed for validation in script_validations)
         assert all(validation.source == "deterministic" for validation in script_validations)
 
-        assert db.query(ExportJob).filter(ExportJob.project_id == project_id).count() == 5
+        assert db.query(ExportJob).filter(ExportJob.project_id == project_id).count() == 7
         assert db.query(Checkpoint).filter(Checkpoint.project_id == project_id).count() >= 2
     finally:
         db.close()
 
 
-def test_full_pipeline_with_custom_text_style(client):
-    project_id, _exports = _full_pipeline(client, style_kind="custom_text", style_value="More suspense and faster rhythm.")
+def test_full_pipeline_with_custom_text_style(client, monkeypatch):
+    project_id, _exports = _full_pipeline(
+        client,
+        monkeypatch,
+        style_kind="custom_text",
+        style_value="More suspense and faster rhythm.",
+    )
 
     db_gen = client.app.dependency_overrides[get_db]()
     db = next(db_gen)
@@ -160,8 +174,8 @@ def test_full_pipeline_with_custom_text_style(client):
         db.close()
 
 
-def test_full_pipeline_no_repair_attempts_on_clean_run(client):
-    project_id, _exports = _full_pipeline(client)
+def test_full_pipeline_no_repair_attempts_on_clean_run(client, monkeypatch):
+    project_id, _exports = _full_pipeline(client, monkeypatch)
 
     db_gen = client.app.dependency_overrides[get_db]()
     db = next(db_gen)
@@ -172,8 +186,8 @@ def test_full_pipeline_no_repair_attempts_on_clean_run(client):
         db.close()
 
 
-def test_full_pipeline_scene_plan_scenes_reference_valid_chapters_and_paragraphs(client):
-    project_id, _exports = _full_pipeline(client)
+def test_full_pipeline_scene_plan_scenes_reference_valid_chapters_and_paragraphs(client, monkeypatch):
+    project_id, _exports = _full_pipeline(client, monkeypatch)
 
     db_gen = client.app.dependency_overrides[get_db]()
     db = next(db_gen)
@@ -190,8 +204,8 @@ def test_full_pipeline_scene_plan_scenes_reference_valid_chapters_and_paragraphs
         db.close()
 
 
-def test_full_pipeline_script_blocks_are_traceable_to_paragraphs(client):
-    project_id, _exports = _full_pipeline(client)
+def test_full_pipeline_script_blocks_are_traceable_to_paragraphs(client, monkeypatch):
+    project_id, _exports = _full_pipeline(client, monkeypatch)
 
     db_gen = client.app.dependency_overrides[get_db]()
     db = next(db_gen)

@@ -183,7 +183,7 @@ export function ConversationPane({
               <label className="figma-attachment-icon figma-composer-tool-button figma-composer-control-button" title="上传文档">
                 <span aria-hidden="true">+</span>
                 <strong>上传文档</strong>
-                <input aria-label="上传小说附件" disabled={loading} type="file" accept=".md,.txt,.docx,.pdf" onChange={handleFileChange} />
+                <input aria-label="上传小说附件" disabled={loading} type="file" accept=".md,.txt,.doc,.docx,.pdf" onChange={handleFileChange} />
               </label>
               <StyleSourceSelector
                 locked={styleLocked}

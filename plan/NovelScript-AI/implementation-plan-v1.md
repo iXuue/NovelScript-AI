@@ -50,7 +50,7 @@ test: add end-to-end acceptance checks
 Implement:
 
 - Project creation with one primary conversation and one active session.
-- Upload and normalize `.md`, `.txt`, `.docx`, and text PDF into Markdown.
+- Upload and normalize `.md`, `.txt`, `.doc`, `.docx`, and text PDF into Markdown.
 - Chapter confirmation panel and stable paragraph IDs.
 - Chapter summaries, evidence index, Story Bible, Style Profile, Scene Plan, script JSON, traceability index.
 - Three mutually exclusive style sources: built-in style, user style text, uploaded historical script.
@@ -60,12 +60,11 @@ Implement:
 - `run_id` and `run_step_id` logging with local developer logs only.
 - Budget tracking for project/session, run, scene, LLM calls, and tool calls.
 - Artifact invalidation with `current`, `stale`, `historical`, `failed`.
-- Export to YAML, Markdown, DOCX, PDF, TXT, and user clean JSON.
+- Export to YAML, Markdown, DOCX, DOC, PDF, TXT, and user clean JSON.
 - Frontend three-column workspace and source evidence modal.
 
 Do not implement:
 
-- `.doc` conversion.
 - OCR for scanned PDFs.
 - User editing YAML directly.
 - User editing Scene Plan fields directly.
@@ -604,8 +603,8 @@ Input support:
 .md  -> read text
 .txt -> read text
 .docx -> python-docx paragraph extraction
+.doc -> LibreOffice conversion to .docx, then python-docx paragraph extraction
 .pdf -> pypdf text extraction only
-.doc -> reject with clear message because DOC conversion is outside MVP
 ```
 
 - [ ] **Step 3: Implement chapter confirmation state**
@@ -1163,12 +1162,13 @@ Supported export formats:
 YAML
 Markdown
 DOCX
+DOC
 PDF
 TXT
 user_clean_json
 ```
 
-Do not implement DOC export.
+DOC and PDF exports are generated from DOCX through LibreOffice.
 
 - [ ] **Step 3: Implement export run**
 
@@ -1567,7 +1567,7 @@ Known execution risks:
 
 - LLM provider implementation must stay behind `worker_service.py` so tests can use deterministic stub workers.
 - PDF extraction must remain text-only; scanned PDF OCR is outside MVP.
-- DOC conversion is outside MVP acceptance.
+- DOC upload and DOC/PDF export require LibreOffice; Docker installs this runtime automatically.
 - Developer logs can contain user text, so local retention and deletion rules must be implemented before enabling full Prompt logging.
 
 Execution recommendation:
