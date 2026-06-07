@@ -1,6 +1,11 @@
 # 叙影工坊
 
-项目展示视频：待补充
+## 项目展示视频
+
+- B 站：[七牛云——小说转剧本 Agent](https://www.bilibili.com/video/BV1dxEh6hEwk/?share_source=copy_web&vd_source=eec0aafeebe55751a513db58d8e37781)
+- 百度网盘：七牛云——小说转剧本.mp4
+  - 链接：[https://pan.baidu.com/s/1ZUeG061h32uXl_mY2jomRA?pwd=gw8g](https://pan.baidu.com/s/1ZUeG061h32uXl_mY2jomRA?pwd=gw8g)
+  - 提取码：`gw8g`
 
 面向小说影视化改编的章节分析、场景规划、剧本生成与多格式导出系统。
 
