@@ -505,27 +505,27 @@ def _script_scene_prompt(
             )
     return (
         "你是剧本生成 Worker。请为已确认的单个场景生成剧本内容。\n"
-        "所有描述性文本必须使用中文。JSON 的 key 也必须使用中文。只输出一个 JSON object，不要 Markdown，不要解释。\n"
-        "JSON schema：{\"场景编号\":\"S001\",\"标题\":\"...\",\"场景信息\":\"...\","
-        "\"人物\":[\"...\"],\"场景目的\":\"...\",\"核心冲突\":\"...\","
-        "\"内容块\":["
-        "{\"内容块编号\":\"CB001\",\"类型\":\"action\",\"文本\":\"她站在门口，雨水从屋檐滴落。\",\"说话人\":null,\"表演指示\":null,\"来源段落编号\":[\"CH001_P001\"],\"来源证据编号\":[]},"
-        "{\"内容块编号\":\"CB002\",\"类型\":\"dialogue\",\"文本\":\"我回来了。\",\"说话人\":\"林雨\",\"表演指示\":\"低声\",\"来源段落编号\":[\"CH001_P002\"],\"来源证据编号\":[]}]}\n"
+        "所有描述性文本必须使用中文。只输出一个 JSON object，不要 Markdown，不要解释。\n"
+        "JSON schema：{\"scene_id\":\"S001\",\"title\":\"...\",\"scene_info\":\"...\","
+        "\"characters\":[\"...\"],\"scene_purpose\":\"...\",\"core_conflict\":\"...\","
+        "\"content_blocks\":["
+        "{\"content_block_id\":\"CB001\",\"type\":\"action\",\"text\":\"她站在门口，雨水从屋檐滴落。\",\"speaker\":null,\"parenthetical\":null,\"source_paragraph_ids\":[\"CH001_P001\"],\"source_evidence_ids\":[]},"
+        "{\"content_block_id\":\"CB002\",\"type\":\"dialogue\",\"text\":\"我回来了。\",\"speaker\":\"林雨\",\"parenthetical\":\"低声\",\"source_paragraph_ids\":[\"CH001_P002\"],\"source_evidence_ids\":[]}]}\n"
         "规则：\n"
-        "- 场景编号 必须与输入场景一致。\n"
-        "- 标题、文本、场景信息、场景目的、核心冲突等所有描述字段必须使用中文撰写。\n"
-        "- 场景信息 概括内外景、地点和时间，格式如\"外景 / 旧宅门口 / 夜\"。\n"
-        "- 人物 列出出场人物中文名；场景目的 描述场景结构功能；核心冲突 描述核心冲突。\n"
+        "- scene_id 必须与输入场景一致。\n"
+        "- title、text、scene_info、scene_purpose、core_conflict 等所有描述字段必须使用中文撰写。\n"
+        "- scene_info 概括内外景、地点和时间，格式如\"外景 / 旧宅门口 / 夜\"。\n"
+        "- characters 列出出场人物中文名；scene_purpose 描述场景结构功能；core_conflict 描述核心冲突。\n"
         "- 从 Scene Plan 中保留必要的 must_cover_plot、must_keep_dialogue、must_keep_visual_elements、must_keep_foreshadowing。\n"
-        "- 内容块 的 类型 只能是 action（动作描写）、dialogue（对白）、narration（旁白）、transition（转场）、note（注释）。\n"
-        "- 对白块的 说话人 必须填写角色中文名且不能为空。非对白块的 说话人 必须为 null。\n"
-        "- 对白块必须填写 表演指示（如 低声、颤抖、冷笑、激动、平静），描述台词的语调、情绪、音量和身体状态。只有当情绪明显且中性时才可省略。非对白块 表演指示 必须为 null。\n"
-        "- 如果对白 说话人 不明确，使用简洁的描述性称呼，如 围观者、人群、旁白，或原文中最接近的角色名。绝不能省略对白的 说话人。\n"
-        "- 每个内容块必须引用 来源段落编号，且不能为空。如果一个块浓缩了多个原文段落，需要引用所有相关段落 ID。\n"
-        "- 来源证据编号 为兼容字段，始终返回空数组。\n"
+        "- content_blocks 的 type 只能是 action（动作描写）、dialogue（对白）、narration（旁白）、transition（转场）、note（注释）。\n"
+        "- 对白块的 speaker 必须填写角色中文名且不能为空。非对白块的 speaker 必须为 null。\n"
+        "- 对白块必须填写 parenthetical 表演指示（如 低声、颤抖、冷笑、激动、平静），描述台词的语调、情绪、音量和身体状态。只有当情绪明显且中性时才可省略。非对白块 parenthetical 必须为 null。\n"
+        "- 如果对白 speaker 不明确，使用简洁的描述性称呼，如 围观者、人群、旁白，或原文中最接近的角色名。绝不能省略对白的 speaker。\n"
+        "- 每个 content_block 必须引用 source_paragraph_ids，且不能为空。如果一个块浓缩了多个原文段落，需要引用所有相关段落 ID。\n"
+        "- source_evidence_ids 为兼容字段，始终返回空数组。\n"
         "- 如果提供了 confirmed_feedback_plan，仅修改指定范围内的剧本文本，保留原文事实。\n"
-        "- Scene Plan 已确认，不得改变场景编号、场景顺序、来源章节或来源段落。\n"
-        "- 文本 中不得包含内部分析或注释。\n\n"
+        "- Scene Plan 已确认，不得改变 scene_id、场景顺序、来源章节或来源段落。\n"
+        "- text 中不得包含内部分析或注释。\n\n"
         f"scene_plan_scene:\n{_scene_block(scene)}\n\n"
         f"source_paragraphs:\n{_paragraph_block(paragraphs)}\n\n"
         f"style_profile:\n{truncate_text(style_profile.profile_text, 3000) if style_profile is not None else '使用中性、简洁的剧本风格。'}"
@@ -671,8 +671,8 @@ def _script_scene_repair_prompt(
 ) -> str:
     return (
         "你是剧本场景修复 Worker。请根据校验问题修复已生成的单个剧本场景。\n"
-        "所有描述性文本必须使用中文，JSON 的 key 也必须使用中文。返回完整的修复后场景，只输出一个 JSON object，不要 Markdown，不要解释。\n"
-        "使用与 script_generation 相同的中文 key schema。\n"
+        "所有描述性文本必须使用中文。返回完整的修复后场景，只输出一个 JSON object，不要 Markdown，不要解释。\n"
+        "使用与 script_generation 相同的 schema。\n"
         "规则：\n"
         "- 尽量保留有效的 content_blocks。\n"
         "- 仅修复校验报告中指出的问题，除非一致性需要额外调整。\n"
@@ -847,45 +847,7 @@ def _validate_script_scene_validation_payload(payload: dict) -> dict:
     return {"passed": passed, "issues": issues, "suggestions": suggestions, "coverage": coverage}
 
 
-CHINESE_KEY_MAP = {
-    "场景编号": "scene_id",
-    "标题": "title",
-    "场景信息": "scene_info",
-    "角色": "characters",
-    "人物": "characters",
-    "场景目的": "scene_purpose",
-    "核心冲突": "core_conflict",
-    "内容块": "content_blocks",
-    "内容": "content_blocks",
-    "内容块编号": "content_block_id",
-    "类型": "type",
-    "文本": "text",
-    "说话人": "speaker",
-    "表演指示": "parenthetical",
-    "来源段落编号": "source_paragraph_ids",
-    "来源证据编号": "source_evidence_ids",
-}
-
-
-def _translate_chinese_keys(data: dict) -> dict:
-    """Map Chinese JSON keys to English internal keys. Pass through unknown keys unmodified."""
-    result: dict = {}
-    for key, value in data.items():
-        mapped = CHINESE_KEY_MAP.get(key, key)
-        if isinstance(value, dict):
-            result[mapped] = _translate_chinese_keys(value)
-        elif isinstance(value, list):
-            result[mapped] = [
-                _translate_chinese_keys(item) if isinstance(item, dict) else item
-                for item in value
-            ]
-        else:
-            result[mapped] = value
-    return result
-
-
 def _validate_script_scene_payload(payload: dict, scene: ScenePlanScene, paragraph_ids: set[str]) -> dict:
-    payload = _translate_chinese_keys(payload)
     if payload.get("scene_id") != scene.scene_id:
         raise RuntimeError("script_generation scene_id must match scene plan")
     title = payload.get("title")
