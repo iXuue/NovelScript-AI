@@ -399,9 +399,7 @@ def _validate_chapter_scene_plan_payload(payload: dict, chapter: Chapter, paragr
             validated[field] = value.strip()
         for field in CHAPTER_SCENE_LIST_FIELDS:
             value = scene.get(field)
-            if not isinstance(value, list):
-                raise RuntimeError(f"scene_plan_chapter scene field {field} must be a list")
-            validated[field] = value
+            validated[field] = _normalize_scene_list_field(value, field, "scene_plan_chapter")
         if not validated["source_paragraph_ids"]:
             raise RuntimeError("scene_plan_chapter source_paragraph_ids must be non-empty")
         if any(not isinstance(paragraph_id, str) or not paragraph_id.strip() for paragraph_id in validated["source_paragraph_ids"]):
@@ -796,9 +794,7 @@ def _validate_scene_plan_payload(payload: dict, chapter_ids: set[str], paragraph
             validated[field] = value.strip()
         for field in LIST_FIELDS:
             value = scene.get(field)
-            if not isinstance(value, list):
-                raise RuntimeError(f"scene_plan scene field {field} must be a list")
-            validated[field] = value
+            validated[field] = _normalize_scene_list_field(value, field, "scene_plan")
         if validated["scene_id"] in seen_scene_ids:
             raise RuntimeError("scene_plan scene_id must be unique")
         if validated["scene_id"] != f"S{expected_order:03d}":
@@ -827,6 +823,17 @@ def _validated_order(scene: dict, expected_order: int) -> int:
     if not isinstance(order, int) or order != expected_order:
         raise RuntimeError("scene_plan order must be consecutive starting at 1")
     return order
+
+
+def _normalize_scene_list_field(value: object, field: str, context: str) -> list:
+    if isinstance(value, list):
+        return value
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    raise RuntimeError(f"{context} scene field {field} must be a list")
 
 
 def _validate_scene_plan_validation_payload(payload: dict) -> dict:
