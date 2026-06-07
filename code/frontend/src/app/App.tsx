@@ -988,6 +988,7 @@ export default function App({ initialYaml }: AppProps) {
           onNewProjectNameChange={setNewProjectName}
           onLogout={handleLogout}
           onSelectProject={(projectId) => {
+            if (projectId === activeProjectId) return;
             setActiveProjectId(projectId);
             resetArtifactsForProject();
           }}
