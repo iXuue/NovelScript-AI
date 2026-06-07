@@ -136,7 +136,6 @@ export function ProjectSidebar({
   const [deleteMode, setDeleteMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
   const hasScenePlanScenes = Boolean(scenePlan?.scenes.length);
   const [scenePlanOpen, setScenePlanOpen] = useState(false);
   const [scriptOpen, setScriptOpen] = useState(false);
@@ -265,7 +264,6 @@ export function ProjectSidebar({
                           toggleSelect(project.project_id);
                         } else {
                           onSelectProject(project.project_id);
-                          setExpandedProjectId((value) => (value === project.project_id ? null : project.project_id));
                         }
                       }}
                     >
@@ -273,11 +271,7 @@ export function ProjectSidebar({
                         <span className={`figma-checkbox ${selectedIds.has(project.project_id) ? "checked" : ""}`} aria-hidden="true" />
                       ) : null}
                       <span>{project.name}</span>
-                      {!deleteMode ? <DisclosureChevron open={expandedProjectId === project.project_id} /> : null}
                     </button>
-                    {!deleteMode && expandedProjectId === project.project_id ? (
-                      <div className="figma-project-thread-preview">暂无对话</div>
-                    ) : null}
                   </div>
                 ))
               ) : null}
