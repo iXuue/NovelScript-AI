@@ -1,7 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 
-import type { AgentProgress as AgentProgressType, ChapterDraft, ConversationMessage, StyleSource, UiMode } from "../types";
-import { AgentProgress } from "./AgentProgress";
+import type { ChapterDraft, ConversationMessage, StyleSource, UiMode } from "../types";
 import { ChapterConfirmation } from "./ChapterConfirmation";
 import { StyleSourceSelector } from "./StyleSourceSelector";
 
@@ -19,9 +18,7 @@ type Props = {
   chaptersConfirmed: boolean;
   canGenerateScenePlan: boolean;
   canGenerateScript: boolean;
-  progress: AgentProgressType | null;
   loading: boolean;
-  activeLabel: string | null;
   onStyleChange: (source: StyleSource | null) => void;
   onStyleReferenceSelected: (file: File) => void;
   onNovelSelected: (file: File) => void;
@@ -32,7 +29,6 @@ type Props = {
 };
 
 export function ConversationPane({
-  activeLabel,
   chapters,
   chaptersConfirmed,
   canGenerateScenePlan,
@@ -41,7 +37,6 @@ export function ConversationPane({
   hasNovelUpload,
   loading,
   messages,
-  progress,
   selectedStyle,
   styleLocked,
   uploadedNovelName,
@@ -51,12 +46,11 @@ export function ConversationPane({
   onNovelSelected,
   onStyleChange,
   onStyleReferenceSelected,
-  onSubmitMessage,
+  onSubmitMessage
 }: Props) {
   const [draft, setDraft] = useState("");
   const needsSetup = !hasNovelUpload || !selectedStyle;
   const showSetupHint = needsSetup && messages.length === 0;
-  const showAgentProgress = Boolean(activeLabel) || progress?.status === "queued" || progress?.status === "running";
   const showGenerateAction = canGenerateScenePlan || canGenerateScript;
   const generateLabel = canGenerateScenePlan ? "开始生成 Scene Plan" : "开始生成剧本";
   const handleGenerate = canGenerateScenePlan ? onGenerateScenePlan : onGenerateScript;
@@ -87,14 +81,6 @@ export function ConversationPane({
           </div>
         </header>
       ) : null}
-
-      <StyleSourceSelector
-        locked={styleLocked}
-        loading={loading}
-        selected={selectedStyle}
-        onChange={onStyleChange}
-        onReferenceFileSelected={onStyleReferenceSelected}
-      />
 
       <div className="figma-conversation-body">
         {showSetupHint ? (
@@ -131,8 +117,6 @@ export function ConversationPane({
             </article>
           ))}
         </section>
-
-        {showAgentProgress ? <AgentProgress activeLabel={activeLabel} progress={progress} /> : null}
       </div>
 
       <form className="figma-composer" onSubmit={handleSubmit}>
@@ -140,17 +124,25 @@ export function ConversationPane({
           <textarea
             aria-label="对话输入"
             disabled={loading}
-            placeholder="输入要求，例如：把第一场对白改得更短。"
+            placeholder="请先上传文档并选择风格；"
             rows={4}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
           />
           <div className="figma-composer-actions">
             <div className="figma-composer-tools">
-              <label className="figma-attachment-icon" title="上传小说附件">
+              <label className="figma-attachment-icon figma-composer-tool-button" title="上传文档">
                 <span aria-hidden="true">+</span>
+                <strong>上传文档</strong>
                 <input aria-label="上传小说附件" disabled={loading} type="file" accept=".md,.txt,.docx,.pdf" onChange={handleFileChange} />
               </label>
+              <StyleSourceSelector
+                locked={styleLocked}
+                loading={loading}
+                selected={selectedStyle}
+                onChange={onStyleChange}
+                onReferenceFileSelected={onStyleReferenceSelected}
+              />
               {uploadedNovelName ? <span className="figma-uploaded-name">{uploadedNovelName}</span> : null}
             </div>
             <div className="figma-composer-main-actions">
