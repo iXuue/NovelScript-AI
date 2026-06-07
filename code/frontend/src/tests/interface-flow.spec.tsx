@@ -102,6 +102,13 @@ test("App triggers scene plan generation, confirmation, script generation, and e
   let scenePlanConfirmed = false;
   let scriptGenerated = false;
   let feedbackPlanRequestBody: { message: string; target: unknown } | null = null;
+  let persistedMessages: Array<{
+    message_id: string;
+    conversation_id: string;
+    role: "user" | "assistant";
+    content: string;
+    created_at: string;
+  }> = [];
 
   window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "interface-token");
   vi.stubGlobal(
@@ -116,7 +123,7 @@ test("App triggers scene plan generation, confirmation, script generation, and e
       }
       if (method === "GET" && path === "/projects") return jsonResponse([project]);
       if (method === "GET" && path === "/projects/proj_001/conversations/primary/messages") {
-        return jsonResponse({ conversation_id: "conv_001", messages: [] });
+        return jsonResponse({ conversation_id: "conv_001", messages: persistedMessages });
       }
       if (method === "GET" && path === "/projects/proj_001/style-source") {
         return jsonResponse({
@@ -210,17 +217,27 @@ test("App triggers scene plan generation, confirmation, script generation, and e
       }
       if (method === "POST" && path === "/projects/proj_001/conversations/primary/feedback-plan") {
         feedbackPlanRequestBody = JSON.parse(String(init?.body ?? "{}"));
+        const userMessage = {
+          message_id: "msg_feedback",
+          conversation_id: "conv_001",
+          role: "user" as const,
+          content: feedbackPlanRequestBody?.message ?? "",
+          created_at: "2026-06-05T00:02:00Z"
+        };
+        const assistantMessage = {
+          message_id: "msg_plan",
+          conversation_id: "conv_001",
+          role: "assistant" as const,
+          content: "修改计划已生成，目标：剧本章节 CH001。请确认后执行。",
+          created_at: "2026-06-05T00:02:01Z"
+        };
+        persistedMessages = [userMessage, assistantMessage];
         return jsonResponse({
           feedback_plan_id: "fbp_001",
           message_id: "msg_feedback",
           run_id: "run_feedback",
-          message: {
-            message_id: "msg_feedback",
-            conversation_id: "conv_001",
-            role: "user",
-            content: feedbackPlanRequestBody?.message ?? "",
-            created_at: "2026-06-05T00:02:00Z"
-          },
+          message: userMessage,
+          assistant_message: assistantMessage,
           stage: "script",
           target: feedbackPlanRequestBody?.target,
           target_type: "chapters",
@@ -241,6 +258,23 @@ test("App triggers scene plan generation, confirmation, script generation, and e
           updated_at: "2026-06-05T00:02:00Z"
         });
       }
+      if (method === "POST" && path === "/projects/proj_001/conversations/primary/feedback-plan/fbp_001/confirm") {
+        const assistantMessage = {
+          message_id: "msg_done",
+          conversation_id: "conv_001",
+          role: "assistant" as const,
+          content: "已按修改计划完成剧本修改，范围：剧本章节 CH001。场景规划保持不变。",
+          created_at: "2026-06-05T00:03:00Z"
+        };
+        persistedMessages = [...persistedMessages, assistantMessage];
+        return jsonResponse({
+          run_id: "run_confirm_feedback",
+          status: "succeeded",
+          stage: "script",
+          script_version_id: "script_v002",
+          assistant_message: assistantMessage
+        });
+      }
       if (method === "GET" && path === "/projects/proj_001/runs/active") return jsonResponse(null);
 
       return jsonResponse({ error: { code: "not_mocked", message: `${method} ${path}`, details: {} } }, 500);
@@ -252,11 +286,11 @@ test("App triggers scene plan generation, confirmation, script generation, and e
   await screen.findByText("悬疑/惊悚");
   expect(within(screen.getByLabelText("对话区")).getAllByRole("button", { name: "开始生成" }).length).toBeGreaterThan(0);
 
-  fireEvent.click(screen.getByRole("button", { name: "场景计划" }));
-  fireEvent.click(await screen.findByRole("button", { name: "生成场景计划" }));
+  fireEvent.click(screen.getByRole("button", { name: "场景规划" }));
+  fireEvent.click(await screen.findByRole("button", { name: "生成场景规划" }));
   const sidebar = screen.getByLabelText("项目导航");
   const resultPane = screen.getByLabelText("成果区");
-  await within(resultPane).findByText("全部场景计划");
+  await within(resultPane).findByText("全部场景规划");
   expect(within(resultPane).getByText("Opening")).toBeInTheDocument();
   expect(within(resultPane).getByText("Decision")).toBeInTheDocument();
 
@@ -264,17 +298,17 @@ test("App triggers scene plan generation, confirmation, script generation, and e
   expect(within(resultPane).getByText("S002 Decision")).toBeInTheDocument();
   expect(within(resultPane).queryByText("Opening")).not.toBeInTheDocument();
 
-  fireEvent.click(within(sidebar).getByRole("button", { name: "场景计划" }));
-  expect(within(resultPane).getByText("全部场景计划")).toBeInTheDocument();
+  fireEvent.click(within(sidebar).getByRole("button", { name: "场景规划" }));
+  expect(within(resultPane).getByText("全部场景规划")).toBeInTheDocument();
   expect(within(resultPane).getByText("Opening")).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "确认场景计划" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认场景规划" }));
   await waitFor(() => expect(scenePlanConfirmed).toBe(true));
 
   fireEvent.click(within(screen.getByLabelText("成果区")).getByRole("button", { name: "生成剧本" }));
-  await screen.findByText(/title: Interface project/);
-  await screen.findByText("Lin stands at the door.");
-  await screen.findByText(/scenes:\s\[\]/);
+  await within(resultPane).findByRole("heading", { name: "剧本预览" });
+  await within(resultPane).findByText(/场景编号:\s*S001/);
+  await within(resultPane).findByText(/Lin stands at the door\./);
   fireEvent.click(screen.getByRole("button", { name: /修改目标/ }));
   expect(screen.getByLabelText("全部章节")).toBeChecked();
   fireEvent.click(screen.getByLabelText("剧本章节：CH001"));
@@ -287,9 +321,12 @@ test("App triggers scene plan generation, confirmation, script generation, and e
     })
   );
   await screen.findByText("修改计划待确认");
+  await screen.findByText("修改计划已生成，目标：剧本章节 CH001。请确认后执行。");
+  fireEvent.click(screen.getByRole("button", { name: "确认执行" }));
+  await screen.findByText("已按修改计划完成剧本修改，范围：剧本章节 CH001。场景规划保持不变。");
 
-  fireEvent.click(screen.getByRole("button", { name: "CB001 action 来源证据" }));
-  await screen.findByText("original evidence line");
+  fireEvent.click(screen.getByRole("button", { name: "来源段落" }));
+  await screen.findByText(/original evidence line/);
 });
 
 test("script generation failure does not show demo script", async () => {

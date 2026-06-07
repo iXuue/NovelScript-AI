@@ -81,7 +81,7 @@ function LegacyProjectSidebar({
               type="button"
               onClick={() => onSelectView("scene-plan")}
             >
-              场景计划
+              场景规划
             </button>
             <div className="scene-list">
               {scenePlan?.scenes.map((scene) => (
@@ -250,7 +250,7 @@ export function ProjectSidebar({
                 setScenePlanOpen((value) => !value);
               }}
             >
-              <span>场景计划</span>
+              <span>场景规划</span>
               <DisclosureChevron open={scenePlanOpen} />
             </button>
             {scenePlanOpen && hasScenePlanScenes ? (

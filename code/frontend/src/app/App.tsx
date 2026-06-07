@@ -128,6 +128,20 @@ function updateProject(project: ProjectSummary, patch: Partial<ProjectSummary>):
   return { ...project, ...patch, updated_at: nowIso() };
 }
 
+function mergeConversationMessages(current: ConversationMessage[], incoming: Array<ConversationMessage | null | undefined>): ConversationMessage[] {
+  const next = [...current];
+  for (const message of incoming) {
+    if (!message) continue;
+    const index = next.findIndex((item) => item.message_id === message.message_id);
+    if (index >= 0) {
+      next[index] = message;
+    } else {
+      next.push(message);
+    }
+  }
+  return next;
+}
+
 const HAS_UPLOAD_STAGES = new Set<ProjectStage>([
   "chapters_pending",
   "chapters_confirmed",
@@ -586,7 +600,7 @@ export default function App({ initialYaml }: AppProps) {
 
   function handleGenerateScenePlan() {
     if (!activeProject) return;
-    void runAction("正在生成场景计划", async () => {
+    void runAction("正在生成场景规划", async () => {
       if (mode === "live") {
         await generateScenePlan(activeProject.project_id);
         const current = await getScenePlan(activeProject.project_id);
@@ -606,7 +620,7 @@ export default function App({ initialYaml }: AppProps) {
 
   function handleConfirmScenePlan() {
     if (!activeProject || !scenePlan) return;
-    void runAction("正在确认场景计划", async () => {
+    void runAction("正在确认场景规划", async () => {
       if (mode === "live") {
         try {
           const response = await confirmScenePlan(activeProject.project_id, "button");
@@ -744,9 +758,12 @@ export default function App({ initialYaml }: AppProps) {
       if (target) {
         const plan = await createFeedbackPlan(activeProject.project_id, content, target);
         setPendingFeedbackPlan(plan);
-        if (plan.message) {
-          setMessages((items) => items.map((item) => (item.message_id === local.message_id ? plan.message : item)));
-        }
+        setMessages((items) => {
+          const withPersistedUser = plan.message
+            ? items.map((item) => (item.message_id === local.message_id ? plan.message! : item))
+            : items;
+          return mergeConversationMessages(withPersistedUser, [plan.assistant_message]);
+        });
         return;
       }
       const saved = await sendMessage(activeProject.project_id, content);
@@ -762,8 +779,11 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject || !pendingFeedbackPlan) return;
     const plan = pendingFeedbackPlan;
     void runAction("正在执行修改计划", async () => {
-      await confirmFeedbackPlan(activeProject.project_id, plan.feedback_plan_id);
+      const result = await confirmFeedbackPlan(activeProject.project_id, plan.feedback_plan_id);
       setPendingFeedbackPlan(null);
+      if (result.assistant_message) {
+        setMessages((items) => mergeConversationMessages(items, [result.assistant_message]));
+      }
       const latestMessages = await getPrimaryMessages(activeProject.project_id).catch(() => null);
       if (latestMessages) setMessages(latestMessages.messages);
       if (plan.stage === "scene_plan") {
@@ -872,7 +892,7 @@ export default function App({ initialYaml }: AppProps) {
     if (!activeProject) return "等待项目创建";
     if (!hasNovelUpload) return "正在等待用户上传";
     if (!scenePlan) return "正在等待生成场景";
-    if (!scenePlanConfirmed) return "正在等待用户确认场景计划";
+    if (!scenePlanConfirmed) return "正在等待用户确认场景规划";
     if (!scriptPreview) return "正在等待生成剧本";
     return "剧本已生成";
   }, [activeProject, hasNovelUpload, scenePlan, scenePlanConfirmed, scriptPreview]);

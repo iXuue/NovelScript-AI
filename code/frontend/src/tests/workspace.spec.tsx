@@ -86,7 +86,7 @@ test("starts with an empty project workspace", async () => {
   expect(screen.queryByText("请上传小说并完成风格设计")).not.toBeInTheDocument();
   expect(screen.queryByText("工作台 MVP（中文版）")).not.toBeInTheDocument();
   expect(screen.queryByText("对话记录")).not.toBeInTheDocument();
-  expect(screen.getByText("场景计划")).toBeInTheDocument();
+  expect(screen.getByText("场景规划")).toBeInTheDocument();
   expect(within(screen.getByLabelText("项目导航")).getByRole("button", { name: "新建项目" })).toBeEnabled();
 });
 

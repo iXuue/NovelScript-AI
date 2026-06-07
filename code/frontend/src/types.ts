@@ -190,6 +190,7 @@ export type FeedbackPlan = {
   message_id?: string | null;
   run_id?: string | null;
   message?: ConversationMessage;
+  assistant_message?: ConversationMessage | null;
   stage: "scene_plan" | "script";
   target: FeedbackTarget;
   target_type: FeedbackTarget["type"];

@@ -23,15 +23,21 @@ function paragraphLabel(item: EvidenceItem): string {
 export function EvidenceModal({ projectId, contentBlockId, fallback, onClose }: Props) {
   const [result, setResult] = useState<EvidenceLookupResult | null>(fallback ?? null);
   const [error, setError] = useState<string | null>(null);
+  const [closed, setClosed] = useState(false);
+
+  function closeNow() {
+    setClosed(true);
+    onClose();
+  }
 
   function handleClose(event: MouseEvent<HTMLButtonElement>) {
     event.stopPropagation();
-    onClose();
+    closeNow();
   }
 
   function handleScrimClick(event: MouseEvent<HTMLDivElement>) {
     if (event.target === event.currentTarget) {
-      onClose();
+      closeNow();
     }
   }
 
@@ -55,6 +61,8 @@ export function EvidenceModal({ projectId, contentBlockId, fallback, onClose }: 
       mounted = false;
     };
   }, [contentBlockId, fallback, projectId]);
+
+  if (closed) return null;
 
   return createPortal(
     <div className="modal-scrim" role="presentation" onClick={handleScrimClick}>

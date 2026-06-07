@@ -17,6 +17,7 @@ type Props = {
   statusText: string;
   failedStage?: string | null;
   scenePlanConfirmed: boolean;
+  selectedSceneId?: string | null;
   loading: boolean;
   fallbackEvidence: Record<string, EvidenceLookupResult>;
   onExport: (format: ExportFormat) => void;
@@ -35,6 +36,7 @@ export function ResultPane({
   projectId,
   scenePlan,
   scenePlanConfirmed,
+  selectedSceneId,
   scriptForUi,
   statusText,
   viewMode,
@@ -51,6 +53,8 @@ export function ResultPane({
   void onRepairScriptScene;
 
   const hasScript = Boolean(scriptForUi || yaml);
+  const selectedScene = selectedSceneId ? scenePlan?.scenes.find((scene) => scene.scene_id === selectedSceneId) ?? null : null;
+  const visibleScenes = selectedScene ? [selectedScene] : scenePlan?.scenes ?? [];
 
   return (
     <aside className="figma-result-panel" aria-label="成果区">
@@ -83,7 +87,7 @@ export function ResultPane({
           <section className="figma-scene-plan">
             <div className="figma-result-title-row">
               <div>
-                <h3>场景规划</h3>
+                <h3>{selectedScene ? `${selectedScene.scene_id} ${selectedScene.title}` : "全部场景规划"}</h3>
                 <p>{scenePlan.confirmed || scenePlanConfirmed ? "已确认，可以继续生成剧本。" : "确认前仅用于查看，不开放字段编辑。"}</p>
               </div>
               {scenePlan.confirmed || scenePlanConfirmed ? (
@@ -97,7 +101,7 @@ export function ResultPane({
               )}
             </div>
             <div className="figma-scene-cards">
-              {scenePlan.scenes.map((scene) => (
+              {visibleScenes.map((scene) => (
                 <article className="figma-scene-card" key={scene.scene_id}>
                   <div className="figma-scene-card-title">
                     <span>{scene.scene_id}</span>

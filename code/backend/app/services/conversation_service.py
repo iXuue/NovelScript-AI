@@ -61,7 +61,9 @@ def list_primary_messages(project_id: str, db=None) -> dict:
     }
 
 
-def send_message(project_id: str, content: str, db=None) -> dict:
+def _append_message(project_id: str, content: str, role: str, db=None) -> dict:
+    if role not in {"user", "assistant"}:
+        raise ValueError("conversation message role must be user or assistant")
     if db is not None:
         project = db.get(Project, project_id)
         if project is None:
@@ -70,7 +72,7 @@ def send_message(project_id: str, content: str, db=None) -> dict:
             message_id=persistent_id("msg"),
             project_id=project_id,
             conversation_id=project.primary_conversation_id,
-            role="user",
+            role=role,
             content=content,
             created_at=now_utc(),
         )
@@ -83,12 +85,20 @@ def send_message(project_id: str, content: str, db=None) -> dict:
     message = {
         "message_id": STORE.next_id("msg"),
         "conversation_id": project["primary_conversation_id"],
-        "role": "user",
+        "role": role,
         "content": content,
         "created_at": now_utc(),
     }
     STORE.conversations.setdefault(project_id, []).append(message)
     return message
+
+
+def _append_assistant_message(project_id: str, content: str, db=None) -> dict:
+    return _append_message(project_id, content, "assistant", db)
+
+
+def send_message(project_id: str, content: str, db=None) -> dict:
+    return _append_message(project_id, content, "user", db)
 
 
 def create_feedback_plan(project_id: str, message: str, target: dict, db, llm_provider: LLMProvider | None) -> dict:
@@ -118,6 +128,11 @@ def create_feedback_plan(project_id: str, message: str, target: dict, db, llm_pr
         payload = feedback_plan_to_dict(cached, cache_hit=True)
         payload["message"] = saved_message
         payload["run_id"] = None
+        payload["assistant_message"] = _append_assistant_message(
+            project_id,
+            _feedback_plan_created_message(payload),
+            db,
+        )
         return payload
 
     run = create_project_run(project_id, "feedback_plan", "feedback_plan", ["feedback_plan"], db)
@@ -158,6 +173,11 @@ def create_feedback_plan(project_id: str, message: str, target: dict, db, llm_pr
         payload = feedback_plan_to_dict(entry, cache_hit=False)
         payload["message"] = saved_message
         payload["run_id"] = run_id
+        payload["assistant_message"] = _append_assistant_message(
+            project_id,
+            _feedback_plan_created_message(payload),
+            db,
+        )
         return payload
     except Exception as exc:
         update_run_step(project_id, run_id, "feedback_plan", "failed", str(exc), db=db)
@@ -193,6 +213,11 @@ def confirm_feedback_plan(project_id: str, feedback_plan_id: str, db, llm_provid
                 "status": "succeeded",
                 "stage": "scene_plan",
                 "scene_plan_id": scene_plan["scene_plan_id"],
+                "assistant_message": _append_assistant_message(
+                    project_id,
+                    _feedback_plan_completed_message(plan),
+                    db,
+                ),
             }
         except Exception as exc:
             mirror_project_snapshot(db, project_id)
@@ -215,6 +240,11 @@ def confirm_feedback_plan(project_id: str, feedback_plan_id: str, db, llm_provid
         update_run_status(run_id, "succeeded", db=db)
         result["run_id"] = run_id
         result["status"] = "succeeded"
+        result["assistant_message"] = _append_assistant_message(
+            project_id,
+            _feedback_plan_completed_message(plan),
+            db,
+        )
         return result
     except Exception as exc:
         mirror_project_snapshot(db, project_id)
@@ -229,6 +259,33 @@ def modify_script(project_id: str, message: str, target: dict, db=None) -> dict:
         run = create_project_run(project_id, "conversation_edit", "conversation_edit", ["conversation_edit", "validation"], db)
         return {"run_id": run["run_id"], "status": "running", "stage": "conversation_edit"}
     raise PermissionError("scene_plan_change_required")
+
+
+def _feedback_target_label(plan: dict[str, Any]) -> str:
+    target = plan.get("target") if isinstance(plan.get("target"), dict) else {}
+    target_type = target.get("type")
+    if target_type == "scene_plan":
+        return "场景规划"
+    if target_type == "script":
+        return "全部章节"
+    if target_type == "chapters":
+        chapter_ids = _string_list(target.get("chapter_ids"))
+        return f"剧本章节 {'、'.join(chapter_ids)}" if chapter_ids else "指定剧本章节"
+    return "当前内容"
+
+
+def _feedback_plan_created_message(plan: dict[str, Any]) -> str:
+    prefix = "已命中缓存修改计划" if plan.get("cache_hit") else "修改计划已生成"
+    return f"{prefix}，目标：{_feedback_target_label(plan)}。请确认后执行。"
+
+
+def _feedback_plan_completed_message(plan: dict[str, Any]) -> str:
+    if plan.get("stage") == "scene_plan":
+        return "已按修改计划重新生成场景规划，新场景规划待确认。"
+    target = plan.get("target") if isinstance(plan.get("target"), dict) else {}
+    if target.get("type") == "script":
+        return "已按修改计划完成整部剧本修改。场景规划保持不变。"
+    return f"已按修改计划完成剧本修改，范围：{_feedback_target_label(plan)}。场景规划保持不变。"
 
 
 def _feedback_plan_prompt(user_feedback: str, target: dict[str, Any], context: dict[str, Any]) -> str:

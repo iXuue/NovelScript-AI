@@ -158,7 +158,7 @@ ${yamlScenes}
               chapter_id: scene.source_chapter_ids[0],
               paragraph_id: block.source_paragraph_ids[0] ?? fallbackParagraphId,
               paragraph_ids: [block.source_paragraph_ids[0] ?? fallbackParagraphId],
-              text: block.text ?? "剧本内容来自场景计划。"
+              text: block.text ?? "剧本内容来自场景规划。"
             }
           ]
         }

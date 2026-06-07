@@ -110,15 +110,23 @@ def test_chapter_target_feedback_only_replaces_selected_chapter_scenes(client):
         json={"message": "Only revise the first chapter.", "target": {"type": "chapters", "chapter_ids": ["CH001"]}},
     )
     assert plan.status_code == 200
-    assert plan.json()["target_type"] == "chapters"
-    assert plan.json()["modification_plan"]["intent"] == "modify_chapter"
-    assert plan.json()["modification_plan"]["affected_scope"]["chapter_ids"] == ["CH001"]
+    plan_payload = plan.json()
+    assert plan_payload["target_type"] == "chapters"
+    assert plan_payload["modification_plan"]["intent"] == "modify_chapter"
+    assert plan_payload["modification_plan"]["affected_scope"]["chapter_ids"] == ["CH001"]
+    assert "修改计划已生成" in plan_payload["assistant_message"]["content"]
+    messages_after_plan = client.get(f"/projects/{project_id}/conversations/primary/messages").json()["messages"]
+    assert [message["role"] for message in messages_after_plan] == ["user", "assistant"]
+    assert messages_after_plan[-1]["content"] == plan_payload["assistant_message"]["content"]
 
     confirmed = client.post(
-        f"/projects/{project_id}/conversations/primary/feedback-plan/{plan.json()['feedback_plan_id']}/confirm"
+        f"/projects/{project_id}/conversations/primary/feedback-plan/{plan_payload['feedback_plan_id']}/confirm"
     )
 
     assert confirmed.status_code == 200
+    confirmed_payload = confirmed.json()
+    assert "已按修改计划完成剧本修改" in confirmed_payload["assistant_message"]["content"]
+    assert "剧本章节 CH001" in confirmed_payload["assistant_message"]["content"]
     current = client.get(f"/projects/{project_id}/scripts/current").json()
     before_by_scene = {block["scene_id"]: block["text"] for block in before["content_blocks"] if block["block_type"] == "action"}
     current_by_scene = {block["scene_id"]: block["text"] for block in current["content_blocks"] if block["block_type"] == "action"}
@@ -134,6 +142,9 @@ def test_chapter_target_feedback_only_replaces_selected_chapter_scenes(client):
         assert current_by_scene[scene_id] == "Feedback revised scene from the confirmed plan."
     for scene_id in untouched_scene_ids:
         assert current_by_scene[scene_id] == before_by_scene[scene_id]
+    messages_after_confirm = client.get(f"/projects/{project_id}/conversations/primary/messages").json()["messages"]
+    assert [message["role"] for message in messages_after_confirm] == ["user", "assistant", "assistant"]
+    assert messages_after_confirm[-1]["content"] == confirmed_payload["assistant_message"]["content"]
 
 
 def test_scene_target_feedback_is_rejected(client):

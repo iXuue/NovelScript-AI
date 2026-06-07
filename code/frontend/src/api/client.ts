@@ -243,7 +243,14 @@ export async function createFeedbackPlan(projectId: string, message: string, tar
 export async function confirmFeedbackPlan(
   projectId: string,
   feedbackPlanId: string
-): Promise<{ run_id: string; status: RunStatus; stage: string; scene_plan_id?: string; script_version_id?: string }> {
+): Promise<{
+  run_id: string;
+  status: RunStatus;
+  stage: string;
+  scene_plan_id?: string;
+  script_version_id?: string;
+  assistant_message?: ConversationMessage | null;
+}> {
   return requestJson(`/projects/${projectId}/conversations/primary/feedback-plan/${feedbackPlanId}/confirm`, {
     method: "POST"
   });

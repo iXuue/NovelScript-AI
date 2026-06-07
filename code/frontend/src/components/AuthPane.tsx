@@ -60,7 +60,7 @@ export function AuthPane({
         <div className="figma-auth-copy">
           <div className="figma-auth-brand">NovelScript AI</div>
           <h1>{title}</h1>
-          <p>登录后项目会按账号隔离保存，继续上传小说、设计风格并生成场景计划。</p>
+          <p>登录后项目会按账号隔离保存，继续上传小说、设计风格并生成场景规划。</p>
         </div>
 
         <div className="figma-auth-switch" role="tablist" aria-label="认证方式">

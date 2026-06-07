@@ -1,8 +1,12 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vitest";
 
 import { EvidenceModal } from "../components/EvidenceModal";
 import type { EvidenceLookupResult } from "../types";
+
+afterEach(() => {
+  cleanup();
+});
 
 test("renders source paragraphs even when API payload has only paragraph_id", () => {
   const onClose = vi.fn();
