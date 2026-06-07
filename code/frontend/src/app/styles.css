@@ -1302,7 +1302,7 @@ select:disabled {
 }
 
 .figma-composer {
-  background: rgba(255, 253, 251, 0.82);
+  background: transparent;
   border-top: 1px solid var(--studio-line);
   padding: 14px 16px 16px;
   position: relative;
@@ -1310,13 +1310,18 @@ select:disabled {
 }
 
 .figma-composer-field {
-  background: #fffaf7;
+  background: transparent;
   border: 1px solid var(--studio-line);
   border-radius: var(--studio-radius);
-  box-shadow: var(--studio-shadow-soft);
+  box-shadow: none;
   height: 172px;
   overflow: visible;
   position: relative;
+}
+
+.figma-composer-field:focus-within {
+  border-color: var(--studio-line);
+  box-shadow: none;
 }
 
 .figma-composer .figma-composer-field textarea {
@@ -1330,6 +1335,12 @@ select:disabled {
   padding: 13px 14px 76px;
   resize: none;
   width: 100%;
+}
+
+.figma-composer .figma-composer-field textarea:focus,
+.figma-composer .figma-composer-field textarea:focus-visible {
+  box-shadow: none;
+  outline: 0;
 }
 
 .figma-composer-actions {
