@@ -9,6 +9,11 @@ from app.api.auth import get_current_user
 from app.api.errors import api_error
 from app.core.database import get_db
 from app.models.user import User
+from app.services.document_conversion_service import (
+    DocumentConversionError,
+    DocumentConverterUnavailableError,
+    UnsupportedDocumentTypeError,
+)
 from app.services.export_job_service import create_export_job, get_export_job
 from app.services.export_service import EXPORT_CONTENT_TYPES
 from app.services.local_snapshot_service import mirror_project_snapshot
@@ -17,7 +22,7 @@ from app.services.run_service import create_project_run, update_run_status, upda
 
 router = APIRouter()
 
-ALLOWED_FORMATS = {"yaml", "markdown", "docx", "pdf", "txt", "clean_json"}
+ALLOWED_FORMATS = {"yaml", "markdown", "doc", "docx", "pdf", "txt", "clean_json"}
 
 
 class CreateExportRequest(BaseModel):
@@ -41,9 +46,13 @@ def create_export_endpoint(
         export = create_export_job(db, project_id, payload.format)
     except PermissionError:
         raise api_error(409, "script_not_ready", "Script is not ready")
+    except UnsupportedDocumentTypeError as exc:
+        raise api_error(400, "unsupported_document_conversion", str(exc))
+    except DocumentConverterUnavailableError as exc:
+        raise api_error(503, "document_converter_unavailable", str(exc))
+    except DocumentConversionError as exc:
+        raise api_error(400, "document_conversion_failed", str(exc))
     except ValueError as exc:
-        if str(exc) == "pdf_not_available":
-            raise api_error(400, "pdf_not_available", "PDF export is not available without a PDF renderer")
         raise api_error(400, "validation_error", str(exc))
     run = create_project_run(project_id, "export", "export", ["export"], db)
     update_run_step(project_id, run["run_id"], "export", "succeeded", "Export completed", db)

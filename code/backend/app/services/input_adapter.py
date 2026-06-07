@@ -4,6 +4,8 @@ from email.policy import default
 from io import BytesIO
 from pathlib import Path
 
+from app.services.document_conversion_service import convert_document
+
 
 @dataclass(frozen=True)
 class UploadedFilePayload:
@@ -40,14 +42,11 @@ def parse_multipart_files(body: bytes, content_type: str, field_names: list[str]
 def normalize_to_markdown(filename: str, content: bytes) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix == ".doc":
-        raise ValueError(".doc is not supported in MVP")
+        return _docx_to_markdown(convert_document(content, ".doc", ".docx"))
     if suffix in {".md", ".txt"}:
         return content.decode("utf-8-sig")
     if suffix == ".docx":
-        from docx import Document
-
-        document = Document(BytesIO(content))
-        return "\n\n".join(p.text for p in document.paragraphs if p.text.strip())
+        return _docx_to_markdown(content)
     if suffix == ".pdf":
         try:
             from pypdf import PdfReader
@@ -57,5 +56,14 @@ def normalize_to_markdown(filename: str, content: bytes) -> str:
         reader = PdfReader(BytesIO(content))
         pages = [(page.extract_text() or "").strip() for page in reader.pages]
         return "\n\n".join(page for page in pages if page)
-    raise ValueError(f"unsupported file type: {suffix}")
+    from app.services.document_conversion_service import UnsupportedDocumentTypeError
+
+    raise UnsupportedDocumentTypeError(f"unsupported file type: {suffix}")
+
+
+def _docx_to_markdown(content: bytes) -> str:
+    from docx import Document
+
+    document = Document(BytesIO(content))
+    return "\n\n".join(p.text for p in document.paragraphs if p.text.strip())
 

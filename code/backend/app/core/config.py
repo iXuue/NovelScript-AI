@@ -22,6 +22,8 @@ class Settings:
     max_analysis_chunk_chars: int = 12_000
     max_evidence_items_per_prompt: int = 80
     max_quote_chars: int = 300
+    soffice_binary: str = "soffice"
+    document_conversion_timeout_seconds: int = 60
 
 
 DEFAULT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
@@ -54,6 +56,10 @@ def get_settings(env_file: str | Path | None = None) -> Settings:
         max_analysis_chunk_chars=int(_env_value(env_values, "MAX_ANALYSIS_CHUNK_CHARS", default="12000")),
         max_evidence_items_per_prompt=int(_env_value(env_values, "MAX_EVIDENCE_ITEMS_PER_PROMPT", default="80")),
         max_quote_chars=int(_env_value(env_values, "MAX_QUOTE_CHARS", default="300")),
+        soffice_binary=_env_value(env_values, "SOFFICE_BINARY", default="soffice"),
+        document_conversion_timeout_seconds=int(
+            _env_value(env_values, "DOCUMENT_CONVERSION_TIMEOUT_SECONDS", default="60")
+        ),
     )
 
 

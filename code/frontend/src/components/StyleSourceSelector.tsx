@@ -150,7 +150,7 @@ export function StyleSourceSelector({ locked, loading, selected, onChange, onRef
                   aria-label="上传历史剧本参考"
                   disabled={locked || loading || hasText}
                   type="file"
-                  accept=".md,.txt,.docx,.pdf"
+                  accept=".md,.txt,.doc,.docx,.pdf"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) {

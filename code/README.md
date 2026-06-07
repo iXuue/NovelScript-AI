@@ -1,62 +1,118 @@
 # NovelScript AI Code
 
-本目录是仓库内的代码区。
+This directory contains the runnable application code for NovelScript AI.
 
-## 目录
+## Directory Layout
 
-- `backend/`: FastAPI 后端骨架、领域 DTO、服务层、接口路由和测试。
-- `frontend/`: React + TypeScript + Vite 三栏工作台骨架。
-- `test/`: 跨端验收说明和后续端到端脚本入口。
-- `docker-compose.yml`: 本地 PostgreSQL、后端和前端编排入口。
+- `backend/`: FastAPI backend, SQLAlchemy models, Alembic migrations, services, API routes, and backend tests.
+- `frontend/`: React + TypeScript + Vite frontend.
+- `test/`: acceptance notes and end-to-end test entry points.
+- `docker-compose.yml`: local PostgreSQL, backend, frontend, and test orchestration.
 
-## 当前骨架边界
+## One-Command Docker Setup
 
-当前版本提供可运行的 deterministic stub MVP，用于确认前后端接口形状、页面结构和主流程。服务层暂以进程内存仓库串联流程，同时保留 SQLAlchemy、Alembic、PostgreSQL 和 Docker 入口，后续可将服务层替换为正式持久化实现。
+Recommended for normal development and validation:
 
-## 验证
-
-本项目约定测试优先在 Docker Compose 中执行。
-
-Docker 后端测试：
-
-```powershell
-cd E:\七牛云\code
-docker compose --profile test run --rm backend-test
-```
-
-Docker 前端测试：
-
-```powershell
-cd E:\七牛云\code
-docker compose --profile test run --rm frontend-test
-```
-
-Docker 前端构建：
-
-```powershell
-cd E:\七牛云\code
-docker compose --profile test run --rm frontend-build
-```
-
-启动完整本地环境：
-
-```powershell
-cd E:\七牛云\code
+```bash
 docker compose up --build
 ```
 
-后端本机调试：
+Then open:
 
-```powershell
-cd E:\七牛云\code\backend
+- Frontend: `http://localhost:5173`
+- Backend health check: `http://localhost:8000/health`
+
+The backend Docker image installs the document conversion runtime automatically:
+
+- `libreoffice-writer`: converts legacy `.doc` uploads and generates `.doc` / `.pdf` exports.
+- `fonts-noto-cjk`: provides CJK fonts for generated PDFs.
+- `fontconfig`: makes installed fonts discoverable to LibreOffice.
+
+No manual LibreOffice setup is required when using Docker.
+
+## Local Development Without Docker
+
+Use Docker unless you specifically need to run services directly on your machine. Local mode requires PostgreSQL and LibreOffice to be installed separately.
+
+Backend:
+
+```bash
+cd code/backend
+python -m pip install --upgrade pip
+python -m pip install -e ".[test]"
+alembic upgrade head
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Frontend:
+
+```bash
+cd code/frontend
+npm install
+npm run dev
+```
+
+Common backend environment variables:
+
+```bash
+DATABASE_URL=postgresql+psycopg://novelscript:novelscript@localhost:5433/novelscript
+STORAGE_ROOT=./storage
+SOFFICE_BINARY=soffice
+DOCUMENT_CONVERSION_TIMEOUT_SECONDS=60
+```
+
+If LibreOffice is not on `PATH`, set `SOFFICE_BINARY` to the full path of the `soffice` executable.
+
+## Tests
+
+Docker backend tests:
+
+```bash
+docker compose --profile test run --rm backend-test
+```
+
+Docker frontend tests:
+
+```bash
+docker compose --profile test run --rm frontend-test
+```
+
+Docker frontend production build:
+
+```bash
+docker compose --profile test run --rm frontend-build
+```
+
+Local backend tests:
+
+```bash
+cd code/backend
 pytest tests -q
 ```
 
-前端本机调试：
+Local frontend tests:
 
-```powershell
-cd E:\七牛云\code\frontend
-npm install
+```bash
+cd code/frontend
 npm test
 npm run build
 ```
+
+## File Support
+
+Uploads:
+
+- Novel uploads: `.md`, `.txt`, `.doc`, `.docx`, `.pdf`
+- Style reference uploads: `.md`, `.txt`, `.doc`, `.docx`, `.pdf`
+
+Exports:
+
+- `yaml`
+- `markdown`
+- `txt`
+- `clean_json`
+- `docx`
+- `doc`
+- `pdf`
+
+PDF upload extracts embedded text. Scanned image-only PDFs may not contain usable text unless OCR is performed before upload.

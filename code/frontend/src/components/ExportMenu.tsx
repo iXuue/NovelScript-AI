@@ -12,6 +12,7 @@ type Props = {
 const formats: Array<{ value: ExportFormat; label: string }> = [
   { value: "yaml", label: "YAML" },
   { value: "markdown", label: "Markdown" },
+  { value: "doc", label: "DOC" },
   { value: "docx", label: "DOCX" },
   { value: "pdf", label: "PDF" },
   { value: "txt", label: "TXT" },

@@ -16,6 +16,11 @@ from app.services.chapter_persistence_service import (
     replace_project_chapters,
 )
 from app.services.checkpoint_service import create_checkpoint
+from app.services.document_conversion_service import (
+    DocumentConversionError,
+    DocumentConverterUnavailableError,
+    UnsupportedDocumentTypeError,
+)
 from app.services.input_adapter import normalize_to_markdown, parse_multipart_files
 from app.services.local_snapshot_service import mirror_project_snapshot
 from app.services.project_service import require_project, update_project_stage, update_project_stage_in_db
@@ -65,9 +70,14 @@ async def upload_novel(
             )
     except KeyError:
         raise api_error(404, "project_not_found", "Project not found")
+    except UnsupportedDocumentTypeError as exc:
+        raise api_error(415, "unsupported_media_type", str(exc))
+    except DocumentConverterUnavailableError as exc:
+        raise api_error(503, "document_converter_unavailable", str(exc))
+    except DocumentConversionError as exc:
+        raise api_error(400, "document_conversion_failed", str(exc))
     except ValueError as exc:
-        code = "unsupported_media_type" if "unsupported" in str(exc) or ".doc" in str(exc) else "validation_error"
-        raise api_error(415 if code == "unsupported_media_type" else 400, code, str(exc))
+        raise api_error(400, "validation_error", str(exc))
 
     chapters = assign_paragraph_ids(detect_documents_chapters(documents))
     drafts = [chapter.to_draft() for chapter in chapters]

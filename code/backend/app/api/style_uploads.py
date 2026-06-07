@@ -5,6 +5,11 @@ from app.api.auth import get_current_user
 from app.api.errors import api_error
 from app.core.database import get_db
 from app.models.user import User
+from app.services.document_conversion_service import (
+    DocumentConversionError,
+    DocumentConverterUnavailableError,
+    UnsupportedDocumentTypeError,
+)
 from app.services.input_adapter import normalize_to_markdown, parse_multipart_file
 from app.services.project_service import require_project
 from app.services.style_service import upload_style_reference
@@ -28,7 +33,12 @@ async def upload_style_reference_endpoint(
         raise api_error(404, "project_not_found", "Project not found")
     except PermissionError:
         raise api_error(409, "style_source_locked", "Style source is locked after Scene Plan confirmation")
+    except UnsupportedDocumentTypeError as exc:
+        raise api_error(415, "unsupported_media_type", str(exc))
+    except DocumentConverterUnavailableError as exc:
+        raise api_error(503, "document_converter_unavailable", str(exc))
+    except DocumentConversionError as exc:
+        raise api_error(400, "document_conversion_failed", str(exc))
     except ValueError as exc:
-        code = "unsupported_media_type" if "unsupported" in str(exc) or ".doc" in str(exc) else "validation_error"
-        raise api_error(415 if code == "unsupported_media_type" else 400, code, str(exc))
+        raise api_error(400, "validation_error", str(exc))
 

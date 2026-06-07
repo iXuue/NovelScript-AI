@@ -204,11 +204,11 @@ export type FeedbackPlan = {
   updated_at: string;
 };
 
-export type ExportFormat = "yaml" | "markdown" | "docx" | "pdf" | "txt" | "clean_json";
+export type ExportFormat = "yaml" | "markdown" | "doc" | "docx" | "pdf" | "txt" | "clean_json";
 
 export type ExportResult = {
   export_id: string;
-  format: string;
+  format: ExportFormat;
   status: string;
   filename?: string;
   download_url: string;

@@ -270,6 +270,19 @@ export async function createExport(
   return requestJson(`/projects/${projectId}/exports`, { method: "POST", body: JSON.stringify({ format }) });
 }
 
+export async function downloadExportFile(downloadUrl: string): Promise<Blob> {
+  const response = await fetch(getExportDownloadUrl(downloadUrl), {
+    headers: {
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+    }
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as ApiErrorBody;
+    throw new ApiError(response.status, payload);
+  }
+  return response.blob();
+}
+
 export function getExportDownloadUrl(downloadUrl: string): string {
   if (downloadUrl.startsWith("http://") || downloadUrl.startsWith("https://")) {
     return downloadUrl;

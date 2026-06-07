@@ -1,6 +1,15 @@
 from app.core.database import get_db
 from app.models.export import ExportJob
+from app.services.document_conversion_service import DocumentConverterUnavailableError
 from app.services.store import STORE
+
+
+def _fake_convert_document(content: bytes, source_suffix: str, target_suffix: str) -> bytes:
+    if target_suffix == ".doc":
+        return b"DOC_BYTES"
+    if target_suffix == ".pdf":
+        return b"%PDF-FAKE"
+    return content
 
 
 def _prepare_script(client) -> str:
@@ -22,13 +31,18 @@ def _prepare_script(client) -> str:
     return project_id
 
 
-def test_pdf_export_returns_explicit_unavailable_error(client):
+def test_pdf_export_produces_pdf_file(client, monkeypatch):
+    monkeypatch.setattr("app.services.export_service.convert_document", _fake_convert_document)
     project_id = _prepare_script(client)
 
     created = client.post(f"/projects/{project_id}/exports", json={"format": "pdf"})
 
-    assert created.status_code == 400
-    assert created.json()["error"]["code"] == "pdf_not_available"
+    assert created.status_code == 200
+    assert created.json()["filename"] == "script.pdf"
+    downloaded = client.get(created.json()["download_url"])
+    assert downloaded.status_code == 200
+    assert downloaded.content.startswith(b"%PDF")
+    assert downloaded.headers["content-type"] == "application/pdf"
 
 
 def test_export_formats_share_yaml_body_but_use_different_extensions(client):
@@ -71,6 +85,43 @@ def test_export_docx_produces_real_docx_file(client):
         assert export.status == "succeeded"
     finally:
         db.close()
+
+
+def test_export_doc_produces_doc_file(client, monkeypatch):
+    monkeypatch.setattr("app.services.export_service.convert_document", _fake_convert_document)
+    project_id = _prepare_script(client)
+
+    created = client.post(f"/projects/{project_id}/exports", json={"format": "doc"})
+
+    assert created.status_code == 200
+    assert created.json()["filename"] == "script.doc"
+    downloaded = client.get(created.json()["download_url"])
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"DOC_BYTES"
+    assert downloaded.headers["content-type"] == "application/msword"
+
+    db_gen = client.app.dependency_overrides[get_db]()
+    db = next(db_gen)
+    try:
+        export = db.query(ExportJob).filter(ExportJob.export_id == created.json()["export_id"]).one()
+        assert export.project_id == project_id
+        assert export.format == "doc"
+        assert export.status == "succeeded"
+    finally:
+        db.close()
+
+
+def test_export_returns_converter_unavailable_when_soffice_is_missing(client, monkeypatch):
+    def fake_convert_document(content: bytes, source_suffix: str, target_suffix: str) -> bytes:
+        raise DocumentConverterUnavailableError("LibreOffice soffice executable was not found")
+
+    monkeypatch.setattr("app.services.export_service.convert_document", fake_convert_document)
+    project_id = _prepare_script(client)
+
+    created = client.post(f"/projects/{project_id}/exports", json={"format": "pdf"})
+
+    assert created.status_code == 503
+    assert created.json()["error"]["code"] == "document_converter_unavailable"
 
 
 def test_export_clean_json_produces_json_without_internal_fields(client):
