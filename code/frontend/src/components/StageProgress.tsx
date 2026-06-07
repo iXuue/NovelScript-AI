@@ -9,9 +9,13 @@ const STAGES = [
   "章节摘要",
   "风格解析",
   "场景规划",
+  "场景规划修改",
   "剧本生成",
   "剧本修改",
 ] as const;
+
+const SCENE_PLAN_STAGE = "场景规划";
+const SCENE_PLAN_EDIT_STAGE = "场景规划修改";
 
 const STEP_TO_STAGE: Record<string, string> = {
   chapter_summary: "章节摘要",
@@ -55,16 +59,24 @@ export function StageProgress({
     if (!stage) continue;
     if (step.status === "succeeded" && stageStatus[stage] !== "running") {
       stageStatus[stage] = "done";
+      if (step.step_type === "scene_plan" && /feedback|regenerated/i.test(step.summary)) {
+        stageStatus[SCENE_PLAN_EDIT_STAGE] = "done";
+      }
     }
   }
 
   // 活跃 run 的步骤：标记正在运行的阶段
   const activeSteps = progress?.steps ?? [];
+  const isScenePlanFeedbackRun = progress?.trigger_type === "scene_plan_feedback";
   for (const step of activeSteps) {
     const stage = STEP_TO_STAGE[step.step_type];
     if (!stage) continue;
     if (step.status === "running") {
-      stageStatus[stage] = "running";
+      if (step.step_type === "scene_plan" && isScenePlanFeedbackRun) {
+        stageStatus[SCENE_PLAN_EDIT_STAGE] = "running";
+      } else {
+        stageStatus[stage] = "running";
+      }
     }
   }
 
@@ -81,6 +93,10 @@ export function StageProgress({
     if (current) {
       stageStatus[current] = "running";
     }
+  }
+
+  if (stageStatus[SCENE_PLAN_STAGE] === "done" && stageStatus[SCENE_PLAN_EDIT_STAGE] === "pending") {
+    stageStatus[SCENE_PLAN_EDIT_STAGE] = "done";
   }
 
   const hasRunning = Object.values(stageStatus).some((s) => s === "running");

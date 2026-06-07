@@ -120,7 +120,31 @@ def test_source_paragraph_ids_are_normalized_when_known():
     assert validated["content_blocks"][0]["source_paragraph_ids"] == ["CH001_P011", "CH002_P003"]
 
 
+def test_source_paragraph_alt_suffix_is_normalized_when_known():
+    payload = {
+        "scene_id": "S001",
+        "title": "Rainy Return",
+        "content_blocks": [
+            {
+                "content_block_id": "CB001",
+                "type": "action",
+                "text": "She waits at the gate.",
+                "speaker": None,
+                "source_evidence_ids": [],
+                "source_paragraph_ids": ["CH001_P001_ALT"],
+            }
+        ],
+    }
+
+    validated = _validate_script_scene_payload(payload, SceneStub(), {"CH001_P001"})
+
+    assert validated["content_blocks"][0]["source_paragraph_ids"] == ["CH001_P001"]
+
+
 def test_source_paragraph_id_normalization_keeps_unknown_values_rejectable():
+    assert normalize_paragraph_id("CH001_P001_ALT", {"CH001_P001"}) == "CH001_P001"
+    assert normalize_paragraph_id("CH1_P1_ALT", {"CH001_P001"}) == "CH001_P001"
+    assert normalize_paragraph_id("CH999_P001_ALT", {"CH001_P001"}) == "CH999_P001_ALT"
     assert normalize_paragraph_id("CH999_P1", {"CH001_P001"}) == "CH999_P1"
     assert normalize_paragraph_id("BAD_ID", {"CH001_P001"}) == "BAD_ID"
 

@@ -50,6 +50,7 @@ export type AgentProgress = {
   run_id: string;
   status: RunStatus;
   stage: string;
+  trigger_type?: string;
   current_step: string | null;
   steps: Array<{
     run_step_id: string;

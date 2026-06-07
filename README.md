@@ -1,5 +1,7 @@
 # 叙影工坊
 
+项目展示视频：待补充
+
 面向小说影视化改编的章节分析、场景规划、剧本生成与多格式导出系统。
 
 本仓库按资料、需求、计划和可运行代码分层维护。可运行应用位于 `code/`，全局 README 统一说明项目结构、启动方式、导出设计和常见维护注意事项。
@@ -64,6 +66,40 @@ DOCUMENT_CONVERSION_TIMEOUT_SECONDS=60
 
 ```powershell
 SOFFICE_BINARY=C:\Program Files\LibreOffice\program\soffice.com
+```
+
+Windows 本地开发可使用 `winget` 安装 LibreOffice，并配置用户级 `SOFFICE_BINARY`：
+
+```powershell
+winget install --id TheDocumentFoundation.LibreOffice -e
+
+[Environment]::SetEnvironmentVariable(
+  "SOFFICE_BINARY",
+  "C:\Program Files\LibreOffice\program\soffice.exe",
+  "User"
+)
+```
+
+重开 PowerShell 后验证：
+
+```powershell
+$env:SOFFICE_BINARY
+& $env:SOFFICE_BINARY --version
+```
+
+如果还需要直接使用 `soffice` 命令，可把 LibreOffice 程序目录加入用户级 `PATH`：
+
+```powershell
+$currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$libreOfficePath = "C:\Program Files\LibreOffice\program"
+
+if ($currentPath -notlike "*$libreOfficePath*") {
+  [Environment]::SetEnvironmentVariable(
+    "Path",
+    "$currentPath;$libreOfficePath",
+    "User"
+  )
+}
 ```
 
 ## 数据库迁移注意事项
