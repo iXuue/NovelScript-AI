@@ -396,7 +396,8 @@ def _scene_plan_chapter_prompt(
         "\"scene_function\":\"...\",\"core_conflict\":\"...\",\"adaptation_note\":\"...\"}]}\n"
         "Rules:\n"
         "- Generate one or more scenes for this chapter.\n"
-        "- source_paragraph_ids must reference paragraph IDs from this chapter only and must not be empty.\n"
+        "- source_paragraph_ids must reference paragraph IDs from the paragraphs list below. "
+        "Use the chapter summary to infer which paragraph ranges each scene should cover. Must not be empty.\n"
         "- Do not invent major characters, locations, or plot facts beyond the supplied materials.\n"
         "- Use [] for optional list fields only when nothing relevant is present.\n"
         "- Make scene_function describe what the scene achieves structurally.\n"
@@ -695,13 +696,13 @@ def _paragraph_block(paragraphs: list[Paragraph]) -> str:
             json.dumps(
                 {
                     "paragraph_id": paragraph.paragraph_id,
-                    "text": truncate_text(paragraph.text, 800, ""),
+                    "order": paragraph.order,
                 },
                 ensure_ascii=False,
             )
             for paragraph in paragraphs
         ),
-        8000,
+        4000,
     )
 
 
