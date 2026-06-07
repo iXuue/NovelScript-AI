@@ -68,10 +68,31 @@ type AppProps = {
 };
 
 const AUTH_TOKEN_STORAGE_KEY = "novelscript_auth_token";
+const TEST_MODE_STORAGE_KEY = "novelscript_test_mode";
+const TEST_MODE_USER: AuthUser = {
+  user_id: "user_local_test",
+  login_id: "local-test",
+  created_at: "2026-06-06T00:00:00.000Z"
+};
 
 function readStoredAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+function readLocalTestMode(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  const paramValue = params.get("testMode");
+  if (paramValue === "1") {
+    window.localStorage.setItem(TEST_MODE_STORAGE_KEY, "1");
+    return true;
+  }
+  if (paramValue === "0") {
+    window.localStorage.removeItem(TEST_MODE_STORAGE_KEY);
+    return false;
+  }
+  return window.localStorage.getItem(TEST_MODE_STORAGE_KEY) === "1";
 }
 
 function updateProject(project: ProjectSummary, patch: Partial<ProjectSummary>): ProjectSummary {
@@ -135,16 +156,20 @@ function isApiErrorCode(error: unknown, code: string): boolean {
 }
 
 export default function App({ initialYaml }: AppProps) {
-  const initialYamlProject = useMemo(() => (initialYaml ? createDemoProject() : null), [initialYaml]);
-  const initialProjects = initialYamlProject ? [initialYamlProject] : [];
+  const localTestMode = useMemo(() => readLocalTestMode(), []);
+  const initialWorkspaceProject = useMemo(
+    () => (initialYaml || localTestMode ? createDemoProject(localTestMode ? "本地测试项目" : undefined) : null),
+    [initialYaml, localTestMode]
+  );
+  const initialProjects = initialWorkspaceProject ? [initialWorkspaceProject] : [];
   const [mode, setMode] = useState<UiMode>("demo");
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(localTestMode ? TEST_MODE_USER : null);
   const [authTokenValue, setAuthTokenValue] = useState<string | null>(() => readStoredAuthToken());
-  const [authChecking, setAuthChecking] = useState(!initialYaml);
+  const [authChecking, setAuthChecking] = useState(!initialYaml && !localTestMode);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>(initialProjects);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(initialYamlProject?.project_id ?? null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(initialWorkspaceProject?.project_id ?? null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [viewMode, setViewMode] = useState<WorkspaceView>(initialYaml ? "script" : "conversation");
   const [chapters, setChapters] = useState<ChapterDraft[]>([]);
@@ -193,7 +218,13 @@ export default function App({ initialYaml }: AppProps) {
   );
 
   useEffect(() => {
-    if (initialYaml) return;
+    if (localTestMode) {
+      setStatusMessage("本地测试模式：已绕过登录。");
+    }
+  }, [localTestMode]);
+
+  useEffect(() => {
+    if (initialYaml || localTestMode) return;
     if (!authTokenValue) {
       setAuthToken(null);
       setAuthChecking(false);
@@ -223,10 +254,10 @@ export default function App({ initialYaml }: AppProps) {
     return () => {
       mounted = false;
     };
-  }, [authTokenValue, initialYaml]);
+  }, [authTokenValue, initialYaml, localTestMode]);
 
   useEffect(() => {
-    if (initialYaml || !authUser) return;
+    if (initialYaml || localTestMode || !authUser) return;
     let mounted = true;
     listProjects()
       .then((items) => {
@@ -251,7 +282,7 @@ export default function App({ initialYaml }: AppProps) {
     return () => {
       mounted = false;
     };
-  }, [authUser, initialYaml]);
+  }, [authUser, initialYaml, localTestMode]);
 
   useEffect(() => {
     if (!activeProject || mode !== "live") return;
@@ -309,6 +340,11 @@ export default function App({ initialYaml }: AppProps) {
   }
 
   function handleLogout() {
+    if (localTestMode) {
+      window.localStorage.removeItem(TEST_MODE_STORAGE_KEY);
+      window.location.href = window.location.pathname;
+      return;
+    }
     void logoutUser().catch(() => undefined);
     window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     setAuthToken(null);
@@ -716,7 +752,6 @@ export default function App({ initialYaml }: AppProps) {
         />
         {activeProject ? (
           <ConversationPane
-            activeLabel={loadingLabel}
             canGenerateScenePlan={canGenerateScenePlan}
             canGenerateScript={canGenerateScript}
             chapters={chapters}
@@ -726,7 +761,6 @@ export default function App({ initialYaml }: AppProps) {
             loading={loading}
             messages={messages}
             mode={mode}
-            progress={progress}
             projectName={activeProject.name}
             selectedStyle={styleSourceValue}
             statusMessage={statusMessage}
@@ -750,10 +784,12 @@ export default function App({ initialYaml }: AppProps) {
           </main>
         )}
         <ResultPane
+          activeLabel={loadingLabel}
           failedStage={failedStage}
           fallbackEvidence={fallbackEvidence}
           latestExport={latestExport}
           loading={loading}
+          progress={progress}
           projectId={activeProject?.project_id ?? ""}
           scenePlan={scenePlan}
           scenePlanConfirmed={scenePlanConfirmed}

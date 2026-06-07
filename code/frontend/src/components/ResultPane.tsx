@@ -1,7 +1,8 @@
 import { useState } from "react";
 
-import previewEmptyArt from "../assets/coda-reading-book.webp";
-import type { EvidenceLookupResult, ExportFormat, ExportResult, ScenePlan, ScriptCurrentForUi } from "../types";
+import previewEmptyArt from "../assets/coda-reading-book-3x.webp";
+import type { AgentProgress as AgentProgressType, EvidenceLookupResult, ExportFormat, ExportResult, ScenePlan, ScriptCurrentForUi } from "../types";
+import { AgentProgress } from "./AgentProgress";
 import { EvidenceModal } from "./EvidenceModal";
 import { ExportMenu } from "./ExportMenu";
 import { ScriptTextPreview } from "./ScriptTextPreview";
@@ -19,6 +20,8 @@ type Props = {
   scenePlanConfirmed: boolean;
   loading: boolean;
   fallbackEvidence: Record<string, EvidenceLookupResult>;
+  progress: AgentProgressType | null;
+  activeLabel: string | null;
   onExport: (format: ExportFormat) => void;
   onConfirmScenePlan: () => void;
   onGenerateScenePlan: () => void;
@@ -117,11 +120,13 @@ function LegacyResultPane({
 }
 
 export function ResultPane({
+  activeLabel,
   failedStage,
   fallbackEvidence,
   latestExport,
   loading,
   projectId,
+  progress,
   scenePlan,
   scenePlanConfirmed,
   scriptForUi,
@@ -138,6 +143,7 @@ export function ResultPane({
   const [evidenceBlockId, setEvidenceBlockId] = useState<string | null>(null);
   void onRepairScenePlan;
   void onRepairScriptScene;
+  const showAgentProgress = Boolean(activeLabel) || progress?.status === "queued" || progress?.status === "running";
 
   return (
     <aside className="figma-result-panel" aria-label="成果区">
@@ -256,6 +262,8 @@ export function ResultPane({
           </section>
         ) : null}
       </div>
+
+      {showAgentProgress ? <AgentProgress activeLabel={activeLabel} progress={progress} /> : null}
 
       {evidenceBlockId ? (
         <EvidenceModal
