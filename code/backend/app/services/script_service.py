@@ -968,6 +968,7 @@ def _internal_script(version: ScriptVersion) -> dict:
                         "type": block.block_type,
                         "text": block.text,
                         "speaker": block.speaker,
+                        "parenthetical": block.parenthetical,
                         "source_evidence_ids": block.source_evidence_ids,
                         "source_paragraph_ids": block.source_paragraph_ids,
                     }
